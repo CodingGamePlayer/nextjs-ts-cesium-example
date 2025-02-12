@@ -2,17 +2,21 @@
 
 import React from "react";
 import type { CesiumType } from "../types/cesium";
-import { Cesium3DTileset, type Entity, type Viewer } from "cesium";
+import { Cesium3DTileset, Entity, type Viewer } from "cesium";
 import type { Position } from "../types/position";
-//NOTE: It is important to assign types using "import type", not "import"
 import { dateToJulianDate } from "../example_utils/date";
-//NOTE: This is required to get the stylings for default Cesium UI and controls
 import "cesium/Build/Cesium/Widgets/widgets.css";
+import { SatellitePosition } from "../utils/satellite";
 
-export const CesiumComponent: React.FunctionComponent<{
-  CesiumJs: CesiumType;
+interface CesiumComponentProps {
+  CesiumJs?: CesiumType;
   positions: Position[];
-}> = ({ CesiumJs, positions }) => {
+  issPositions?: SatellitePosition[];
+}
+
+export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumComponentProps) => {
+  if (!CesiumJs) return null;
+
   const cesiumViewer = React.useRef<Viewer | null>(null);
   const cesiumContainerRef = React.useRef<HTMLDivElement>(null);
   const addedScenePrimitives = React.useRef<Cesium3DTileset[]>([]);
@@ -119,6 +123,40 @@ export const CesiumComponent: React.FunctionComponent<{
     }
   }, [positions, cleanUpPrimitives]);
 
+  const drawISSOrbit = React.useCallback(() => {
+    if (!cesiumViewer.current || !issPositions?.length) return;
+
+    const orbitPositions = issPositions.map((pos) => CesiumJs.Cartesian3.fromDegrees(pos.longitude, pos.latitude, pos.height));
+
+    cesiumViewer.current.entities.add({
+      polyline: {
+        positions: orbitPositions,
+        width: 2,
+        material: new CesiumJs.PolylineGlowMaterialProperty({
+          glowPower: 0.2,
+          color: CesiumJs.Color.BLUE,
+        }),
+      },
+    });
+
+    // ISS 모델 추가 (선택사항)
+    cesiumViewer.current.entities.add({
+      position: orbitPositions[0],
+      point: {
+        pixelSize: 10,
+        color: CesiumJs.Color.RED,
+      },
+      label: {
+        text: "ISS",
+        font: "14pt sans-serif",
+        style: CesiumJs.LabelStyle.FILL_AND_OUTLINE,
+        outlineWidth: 2,
+        verticalOrigin: CesiumJs.VerticalOrigin.BOTTOM,
+        pixelOffset: new CesiumJs.Cartesian2(0, -9),
+      },
+    });
+  }, [CesiumJs, issPositions]);
+
   React.useEffect(() => {
     if (cesiumViewer.current === null && cesiumContainerRef.current) {
       CesiumJs.Ion.defaultAccessToken = `${process.env.NEXT_PUBLIC_CESIUM_TOKEN}`;
@@ -157,6 +195,12 @@ export const CesiumComponent: React.FunctionComponent<{
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positions, isLoaded]);
+
+  React.useEffect(() => {
+    if (isLoaded && issPositions?.length) {
+      drawISSOrbit();
+    }
+  }, [isLoaded, issPositions, drawISSOrbit]);
 
   //NOTE: Examples of typing... See above on "import type"
   const entities: Entity[] = [];

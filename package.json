@@ -12,7 +12,8 @@
     "cesium": "^1.115.0",
     "next": "14.1.4",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "satellite.js": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",
