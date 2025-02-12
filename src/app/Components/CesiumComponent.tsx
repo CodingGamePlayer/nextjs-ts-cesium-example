@@ -7,6 +7,7 @@ import type { Position } from "../types/position";
 import { dateToJulianDate } from "../example_utils/date";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import { SatellitePosition } from "../utils/satellite";
+import * as Cesium from "cesium";
 
 interface CesiumComponentProps {
   CesiumJs?: CesiumType;
@@ -24,29 +25,29 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
 
   const resetCamera = React.useCallback(async () => {
     if (cesiumViewer.current !== null) {
-      const is3D = cesiumViewer.current.scene.mode === CesiumJs.SceneMode.SCENE3D;
+      const is3D = cesiumViewer.current.scene.mode === Cesium.SceneMode.SCENE3D;
 
       if (is3D) {
         // 3D 모드: 지구본이 화면 중앙에 오도록 설정
         cesiumViewer.current.scene.camera.setView({
-          destination: CesiumJs.Cartesian3.fromDegrees(128, 36, 25000000), // 한반도 쪽에서 지구를 바라보기
+          destination: Cesium.Cartesian3.fromDegrees(128, 36, 25000000), // 한반도 쪽에서 지구를 바라보기
           orientation: {
-            heading: CesiumJs.Math.toRadians(0),
-            pitch: CesiumJs.Math.toRadians(-90), // 완전히 수직으로 내려다보기
+            heading: Cesium.Math.toRadians(0),
+            pitch: Cesium.Math.toRadians(-90),
             roll: 0,
           },
         });
 
-        // 3D 모드의 카메라 제한
-        cesiumViewer.current.scene.screenSpaceCameraController.minimumZoomDistance = 5000000; // 최소 줌 거리 증가
+        // 3D 모드의 카메라 제한 완화
+        cesiumViewer.current.scene.screenSpaceCameraController.minimumZoomDistance = 1000; // 1km까지 줌인 가능
         cesiumViewer.current.scene.screenSpaceCameraController.maximumZoomDistance = 30000000;
       } else {
         // 2D 모드: 전세계가 보이도록 설정
         cesiumViewer.current.scene.camera.setView({
-          destination: CesiumJs.Cartesian3.fromDegrees(0, 0, 40000000), // 적도 0도, 경도 0도 위치
+          destination: Cesium.Cartesian3.fromDegrees(0, 0, 40000000), // 적도 0도, 경도 0도 위치
           orientation: {
-            heading: CesiumJs.Math.toRadians(0),
-            pitch: CesiumJs.Math.toRadians(0),
+            heading: Cesium.Math.toRadians(0),
+            pitch: Cesium.Math.toRadians(0),
             roll: 0,
           },
         });
@@ -72,8 +73,8 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
   const initializeCesiumJs = React.useCallback(async () => {
     if (cesiumViewer.current !== null) {
       // OSM Buildings는 3D 모드에서만 추가
-      if (cesiumViewer.current.scene.mode === CesiumJs.SceneMode.SCENE3D) {
-        const osmBuildingsTileset = await CesiumJs.createOsmBuildingsAsync();
+      if (cesiumViewer.current.scene.mode === Cesium.SceneMode.SCENE3D) {
+        const osmBuildingsTileset = await Cesium.createOsmBuildingsAsync();
 
         //Clean up potentially already-existing primitives.
         cleanUpPrimitives();
@@ -88,14 +89,14 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
 
       // 모드 변경 이벤트 리스너 추가
       cesiumViewer.current.scene.morphComplete.addEventListener(() => {
-        const is3D = cesiumViewer.current?.scene.mode === CesiumJs.SceneMode.SCENE3D;
+        const is3D = cesiumViewer.current?.scene.mode === Cesium.SceneMode.SCENE3D;
 
         // 2D 모드로 전환시 buildings 제거
         if (!is3D) {
           cleanUpPrimitives();
         } else {
           // 3D 모드로 전환시 buildings 다시 추가
-          CesiumJs.createOsmBuildingsAsync().then((osmBuildingsTileset) => {
+          Cesium.createOsmBuildingsAsync().then((osmBuildingsTileset) => {
             if (cesiumViewer.current) {
               const osmBuildingsTilesetPrimitive = cesiumViewer.current.scene.primitives.add(osmBuildingsTileset);
               addedScenePrimitives.current.push(osmBuildingsTilesetPrimitive);
@@ -107,14 +108,14 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
       //We'll also add our own data here passed down from props as an example
       positions.forEach((p) => {
         cesiumViewer.current?.entities.add({
-          position: CesiumJs.Cartesian3.fromDegrees(p.lng, p.lat),
+          position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat),
           ellipse: {
             semiMinorAxis: 50000.0,
             semiMajorAxis: 50000.0,
             height: 0,
-            material: CesiumJs.Color.RED.withAlpha(0.5),
+            material: Cesium.Color.RED.withAlpha(0.5),
             outline: true,
-            outlineColor: CesiumJs.Color.BLACK,
+            outlineColor: Cesium.Color.BLACK,
           },
         });
       });
@@ -126,43 +127,160 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
   const drawISSOrbit = React.useCallback(() => {
     if (!cesiumViewer.current || !issPositions?.length) return;
 
-    const orbitPositions = issPositions.map((pos) => CesiumJs.Cartesian3.fromDegrees(pos.longitude, pos.latitude, pos.height));
+    const orbitPositions = issPositions.map((pos) => Cesium.Cartesian3.fromDegrees(pos.longitude, pos.latitude, pos.height));
 
     cesiumViewer.current.entities.add({
       polyline: {
         positions: orbitPositions,
         width: 2,
-        material: new CesiumJs.PolylineGlowMaterialProperty({
+        material: new Cesium.PolylineGlowMaterialProperty({
           glowPower: 0.2,
-          color: CesiumJs.Color.BLUE,
+          color: Cesium.Color.BLUE,
         }),
       },
     });
 
-    // ISS 모델 추가 (선택사항)
-    cesiumViewer.current.entities.add({
+    // ISS 모델 추가
+    const issEntity = cesiumViewer.current.entities.add({
+      id: "ISS",
       position: orbitPositions[0],
       point: {
-        pixelSize: 10,
-        color: CesiumJs.Color.RED,
+        pixelSize: 20,
+        color: Cesium.Color.RED,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 2,
       },
       label: {
         text: "ISS",
         font: "14pt sans-serif",
-        style: CesiumJs.LabelStyle.FILL_AND_OUTLINE,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         outlineWidth: 2,
-        verticalOrigin: CesiumJs.VerticalOrigin.BOTTOM,
-        pixelOffset: new CesiumJs.Cartesian2(0, -9),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -9),
       },
     });
-  }, [CesiumJs, issPositions]);
+
+    // ISS 기준 XYZ 축 추가
+    const axisScale = 100000; // 축 길이 (미터 단위)
+
+    // X축 (빨간색)
+    cesiumViewer.current.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+          const issPosition = issEntity.position?.getValue(time);
+          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+
+          const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
+          const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(axisScale, 0, 0), new Cesium.Cartesian3());
+          return [issPosition, endPoint];
+        }, false),
+        width: 2,
+        material: Cesium.Color.RED,
+      },
+      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+        const issPosition = issEntity.position?.getValue(time);
+        if (!issPosition) return orbitPositions[0];
+
+        const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
+        const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(axisScale, 0, 0), new Cesium.Cartesian3());
+        return Cesium.Cartesian3.midpoint(issPosition, endPoint, new Cesium.Cartesian3());
+      }, false) as any,
+      label: {
+        text: "X",
+        font: "14pt sans-serif",
+        fillColor: Cesium.Color.RED,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        outlineWidth: 2,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+        pixelOffset: new Cesium.Cartesian2(0, 0),
+        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        show: true,
+      },
+    });
+
+    // Y축 (초록색)
+    cesiumViewer.current.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+          const issPosition = issEntity.position?.getValue(time);
+          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+
+          const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
+          const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, axisScale, 0), new Cesium.Cartesian3());
+          return [issPosition, endPoint];
+        }, false),
+        width: 2,
+        material: Cesium.Color.GREEN,
+      },
+      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+        const issPosition = issEntity.position?.getValue(time);
+        if (!issPosition) return orbitPositions[0];
+
+        const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
+        const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, axisScale, 0), new Cesium.Cartesian3());
+        return Cesium.Cartesian3.midpoint(issPosition, endPoint, new Cesium.Cartesian3());
+      }, false) as any,
+      label: {
+        text: "Y",
+        font: "14pt sans-serif",
+        fillColor: Cesium.Color.GREEN,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        outlineWidth: 2,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+        pixelOffset: new Cesium.Cartesian2(0, 0),
+        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        show: true,
+      },
+    });
+
+    // Z축 (파란색)
+    cesiumViewer.current.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+          const issPosition = issEntity.position?.getValue(time);
+          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+
+          const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
+          const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, 0, axisScale), new Cesium.Cartesian3());
+          return [issPosition, endPoint];
+        }, false),
+        width: 2,
+        material: Cesium.Color.BLUE,
+      },
+      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+        const issPosition = issEntity.position?.getValue(time);
+        if (!issPosition) return orbitPositions[0];
+
+        const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
+        const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, 0, axisScale), new Cesium.Cartesian3());
+        return Cesium.Cartesian3.midpoint(issPosition, endPoint, new Cesium.Cartesian3());
+      }, false) as any,
+      label: {
+        text: "Z",
+        font: "14pt sans-serif",
+        fillColor: Cesium.Color.BLUE,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        outlineWidth: 2,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+        pixelOffset: new Cesium.Cartesian2(0, 0),
+        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        show: true,
+      },
+    });
+  }, [Cesium, issPositions]);
 
   React.useEffect(() => {
     if (cesiumViewer.current === null && cesiumContainerRef.current) {
-      CesiumJs.Ion.defaultAccessToken = `${process.env.NEXT_PUBLIC_CESIUM_TOKEN}`;
+      Cesium.Ion.defaultAccessToken = `${process.env.NEXT_PUBLIC_CESIUM_TOKEN}`;
 
-      cesiumViewer.current = new CesiumJs.Viewer(cesiumContainerRef.current, {
-        terrain: CesiumJs.Terrain.fromWorldTerrain(),
+      cesiumViewer.current = new Cesium.Viewer(cesiumContainerRef.current, {
+        terrain: Cesium.Terrain.fromWorldTerrain(),
         baseLayerPicker: true,
         navigationHelpButton: false,
         homeButton: true,
@@ -170,8 +288,8 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
         animation: false,
         timeline: false,
         shadows: true,
-        terrainShadows: CesiumJs.ShadowMode.ENABLED,
-        sceneMode: CesiumJs.SceneMode.SCENE3D, // 초기 모드를 3D로 설정
+        terrainShadows: Cesium.ShadowMode.ENABLED,
+        sceneMode: Cesium.SceneMode.SCENE3D, // 초기 모드를 3D로 설정
         sceneModePicker: true, // 모드 변경 버튼 활성화
       });
 
@@ -181,9 +299,9 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
       });
 
       cesiumViewer.current.scene.globe.enableLighting = true;
-      cesiumViewer.current.scene.globe.shadows = CesiumJs.ShadowMode.ENABLED;
+      cesiumViewer.current.scene.globe.shadows = Cesium.ShadowMode.ENABLED;
 
-      cesiumViewer.current.clock.clockStep = CesiumJs.ClockStep.SYSTEM_CLOCK_MULTIPLIER;
+      cesiumViewer.current.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK_MULTIPLIER;
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,7 +323,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
   //NOTE: Examples of typing... See above on "import type"
   const entities: Entity[] = [];
   //NOTE: Example of a function that utilizes CesiumJs features
-  const julianDate = dateToJulianDate(CesiumJs, new Date());
+  const julianDate = dateToJulianDate(Cesium, new Date());
 
   return <div ref={cesiumContainerRef} id="cesium-container" style={{ height: "100vh", width: "100vw" }} />;
 };
