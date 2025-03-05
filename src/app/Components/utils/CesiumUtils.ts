@@ -52,7 +52,7 @@ export const cleanUpPrimitives = (refs: ViewerRefs) => {
 };
 
 // ISS로 카메라 이동 함수
-export const flyToISS = (cesiumViewer: Viewer | null) => {
+export const flyToISS = (cesiumViewer: Viewer | null, enableTracking: boolean = false) => {
   if (!cesiumViewer) return;
 
   const issEntity = cesiumViewer.entities.getById("ISS");
@@ -62,19 +62,35 @@ export const flyToISS = (cesiumViewer: Viewer | null) => {
   if (!position) return;
 
   // 위성을 화면 중앙에 위치시키고 위에서 바라보기
-  cesiumViewer.zoomTo(
-    issEntity,
-    new Cesium.HeadingPitchRange(
-      0, // heading
-      Cesium.Math.toRadians(-90), // pitch: 위에서 아래로 보기
-      2000000 // 거리 (미터)
+  cesiumViewer
+    .zoomTo(
+      issEntity,
+      new Cesium.HeadingPitchRange(
+        0, // heading
+        Cesium.Math.toRadians(-90), // pitch: 위에서 아래로 보기
+        2000000 // 거리 (미터)
+      )
     )
-  );
+    .then(() => {
+      // 추적 활성화 옵션이 true인 경우 ISS 엔티티 추적 시작
+      if (enableTracking) {
+        cesiumViewer.trackedEntity = issEntity;
+      }
+    });
+};
+
+// 엔티티 추적 중지 함수
+export const stopTracking = (cesiumViewer: Viewer | null) => {
+  if (!cesiumViewer) return;
+  cesiumViewer.trackedEntity = undefined;
 };
 
 // 한반도로 이동하는 함수
 export const flyToKorea = (cesiumViewer: Viewer | null) => {
   if (!cesiumViewer) return;
+
+  // 추적 중지
+  stopTracking(cesiumViewer);
 
   // 한반도 중심점으로 이동
   cesiumViewer.camera.flyTo({
@@ -98,6 +114,9 @@ export const flyToKorea = (cesiumViewer: Viewer | null) => {
 // 태양 기준 시점으로 이동하는 함수
 export const flyToSunView = (cesiumViewer: Viewer | null) => {
   if (!cesiumViewer) return;
+
+  // 추적 중지
+  stopTracking(cesiumViewer);
 
   const issEntity = cesiumViewer.entities.getById("ISS");
   if (!issEntity) return;

@@ -12,35 +12,12 @@ import { CesiumComponentProps, RotationState, ViewerRefs } from "./types/CesiumT
 // 유틸리티 함수 임포트
 import { resetCamera, cleanUpPrimitives, flyToISS, flyToKorea, flyToSunView } from "./utils/CesiumUtils";
 import { drawISSOrbit } from "./utils/ISSUtils";
-import { addGroundStations } from "./utils/GroundStationUtils";
 
 // 컨트롤 컴포넌트 임포트
 import RotationControl from "./controls/RotationControl";
 import NavigationButtons from "./controls/NavigationButtons";
 
-export const CesiumComponent = ({
-  CesiumJs,
-  positions,
-  issPositions,
-  groundStations = [
-    {
-      name: "대전 지상국",
-      latitude: 36.3504,
-      longitude: 127.3845,
-      height: 100,
-      communicationRange: 1000,
-      coneAngle: 45,
-    },
-    {
-      name: "제주 지상국",
-      latitude: 33.4996,
-      longitude: 126.5312,
-      height: 100,
-      communicationRange: 1000,
-      coneAngle: 45,
-    },
-  ],
-}: CesiumComponentProps) => {
+export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumComponentProps) => {
   if (!CesiumJs) return null;
 
   // 뷰어 관련 참조
@@ -48,6 +25,7 @@ export const CesiumComponent = ({
   const cesiumContainerRef = React.useRef<HTMLDivElement>(null);
   const addedScenePrimitives = React.useRef<Cesium3DTileset[]>([]);
   const issEntityRef = React.useRef<Entity | null>(null);
+  const initialFlyToCompleted = React.useRef<boolean>(false); // ISS로 초기 이동 완료 여부를 추적하는 플래그
 
   // 상태 관리
   const [isLoaded, setIsLoaded] = React.useState(false);
@@ -188,7 +166,136 @@ export const CesiumComponent = ({
         terrainShadows: Cesium.ShadowMode.ENABLED,
         sceneMode: Cesium.SceneMode.SCENE3D, // 초기 모드를 3D로 설정
         sceneModePicker: true, // 모드 변경 버튼 활성화
+        creditContainer: document.createElement("div"), // 빈 div 요소 사용
+        orderIndependentTranslucency: true,
+        fullscreenButton: false,
+        infoBox: false,
+        shouldAnimate: true,
+        selectionIndicator: false,
       });
+
+      // 크레딧 표시 완전히 비활성화 (여러 방법 적용)
+      if (cesiumViewer.current.cesiumWidget.creditContainer) {
+        // 1. 크레딧 컨테이너 스타일 숨김
+        (cesiumViewer.current.cesiumWidget.creditContainer as HTMLElement).style.display = "none";
+
+        // 2. 크레딧 컨테이너 요소 제거 시도
+        try {
+          const creditContainer = cesiumViewer.current.cesiumWidget.creditContainer;
+          if (creditContainer.parentNode) {
+            creditContainer.parentNode.removeChild(creditContainer);
+          }
+        } catch (e) {
+          console.log("크레딧 컨테이너 제거 중 오류 발생", e);
+        }
+      }
+
+      // 3. 크레딧 표시 관련 설정 변경 (타입 안전한 방법)
+      try {
+        // @ts-ignore - Cesium 내부 API에 접근
+        if (cesiumViewer.current._creditContainer) {
+          // @ts-ignore
+          cesiumViewer.current._creditContainer.style.display = "none";
+        }
+
+        // @ts-ignore - Cesium 내부 API에 접근
+        if (cesiumViewer.current.creditDisplay) {
+          // creditDisplay를 파괴하지 않고 속성만 수정
+          // @ts-ignore
+          if (cesiumViewer.current.creditDisplay.container) {
+            // @ts-ignore
+            cesiumViewer.current.creditDisplay.container.style.display = "none";
+          }
+          // @ts-ignore
+          if (cesiumViewer.current.creditDisplay._creditContainer) {
+            // @ts-ignore
+            cesiumViewer.current.creditDisplay._creditContainer.style.display = "none";
+          }
+          // @ts-ignore
+          cesiumViewer.current.creditDisplay._creditsToDisplay = {};
+          // @ts-ignore
+          cesiumViewer.current.creditDisplay._defaultCredit = undefined;
+        }
+
+        // 추가: 크레딧 표시 비활성화 (Cesium 1.83 이상)
+        // @ts-ignore
+        if (cesiumViewer.current._cesiumWidget && cesiumViewer.current._cesiumWidget.creditDisplay) {
+          // @ts-ignore
+          cesiumViewer.current._cesiumWidget.creditDisplay.container.style.display = "none";
+          // @ts-ignore
+          cesiumViewer.current._cesiumWidget.creditDisplay._creditsToDisplay = {};
+        }
+      } catch (e) {
+        console.log("크레딧 표시 비활성화 중 오류 발생", e);
+      }
+
+      // 4. CSS로 크레딧 관련 요소 숨김 (더 강력한 선택자 사용)
+      const style = document.createElement("style");
+      style.innerHTML = `
+        .cesium-credit-container, .cesium-credit-expand-link, .cesium-credit-text, 
+        .cesium-widget-credits, .cesium-credit-imageContainer, .cesium-credit-lightbox,
+        .cesium-credit-lightbox-overlay, .cesium-credit-lightbox-title, .cesium-credit-lightbox-content,
+        .cesium-credit-lightbox-description, .cesium-credit-lightbox-close,
+        [class*="cesium-credit"], [id*="cesium-credit"] {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          height: 0 !important;
+          width: 0 !important;
+          pointer-events: none !important;
+          position: absolute !important;
+          overflow: hidden !important;
+          z-index: -9999 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border: none !important;
+          max-height: 0 !important;
+          max-width: 0 !important;
+          clip: rect(0, 0, 0, 0) !important;
+          clip-path: inset(50%) !important;
+        }
+        
+        /* Cesium ion 로고 및 워터마크 제거 */
+        .cesium-viewer-bottom, .cesium-viewer-bottom *, 
+        .cesium-viewer-cesiumInspectorContainer, .cesium-viewer-cesium3DTilesInspectorContainer,
+        [class*="cesium-viewer-bottom"], [id*="cesium-viewer-bottom"],
+        .cesium-widget-credits, .cesium-widget-credits *,
+        [class*="cesium-widget-credits"], [id*="cesium-widget-credits"] {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // 5. 하단 컨테이너 직접 제거
+      setTimeout(() => {
+        try {
+          // 모든 가능한 크레딧 관련 요소 선택
+          const bottomElements = document.querySelectorAll(".cesium-viewer-bottom");
+          bottomElements.forEach((element) => {
+            // 요소를 제거하는 대신 스타일만 변경
+            (element as HTMLElement).style.display = "none";
+            (element as HTMLElement).style.visibility = "hidden";
+            (element as HTMLElement).style.opacity = "0";
+            (element as HTMLElement).style.height = "0";
+            (element as HTMLElement).style.overflow = "hidden";
+          });
+
+          // 크레딧 컨테이너 선택
+          const creditElements = document.querySelectorAll(".cesium-credit-container, .cesium-widget-credits");
+          creditElements.forEach((element) => {
+            // 요소를 제거하는 대신 스타일만 변경
+            (element as HTMLElement).style.display = "none";
+            (element as HTMLElement).style.visibility = "hidden";
+            (element as HTMLElement).style.opacity = "0";
+            (element as HTMLElement).style.height = "0";
+            (element as HTMLElement).style.overflow = "hidden";
+          });
+        } catch (e) {
+          console.log("하단 컨테이너 스타일 변경 중 오류 발생", e);
+        }
+      }, 500); // 0.5초 후 실행 (DOM이 완전히 로드된 후)
 
       // 시계 설정 - ISS 움직임을 위한 설정
       cesiumViewer.current.clock.shouldAnimate = true;
@@ -231,6 +338,14 @@ export const CesiumComponent = ({
       const result = drawISSOrbit(cesiumViewer.current, issPositions, rotation, animationSpeed);
       if (result && result.issEntity) {
         issEntityRef.current = result.issEntity;
+
+        // 초기 이동이 아직 완료되지 않은 경우에만 ISS로 카메라 이동
+        if (!initialFlyToCompleted.current) {
+          setTimeout(() => {
+            flyToISS(cesiumViewer.current, true); // 추적 활성화
+            initialFlyToCompleted.current = true; // 초기 이동 완료 표시
+          }, 1000); // 1초 지연 후 실행하여 엔티티가 완전히 로드되도록 함
+        }
       }
     }
   }, [isLoaded, issPositions, rotation, animationSpeed]);
@@ -260,7 +375,7 @@ export const CesiumComponent = ({
   return (
     <>
       <NavigationButtons
-        onFlyToISS={() => flyToISS(cesiumViewer.current)}
+        onFlyToISS={() => flyToISS(cesiumViewer.current, false)}
         onFlyToKorea={() => flyToKorea(cesiumViewer.current)}
         onFlyToSunView={() => flyToSunView(cesiumViewer.current)}
       />
