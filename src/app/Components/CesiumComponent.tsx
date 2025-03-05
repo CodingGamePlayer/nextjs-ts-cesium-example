@@ -53,6 +53,29 @@ export const CesiumComponent = ({
   const addedScenePrimitives = React.useRef<Cesium3DTileset[]>([]);
   const [isLoaded, setIsLoaded] = React.useState(false);
 
+  // ISS 회전 상태 추가
+  const [rotation, setRotation] = React.useState({ yaw: 0, pitch: 0, roll: 0 });
+  const issEntityRef = React.useRef<Entity | null>(null);
+  // 궤도 따라 움직임 제어
+  const [animating, setAnimating] = React.useState(true);
+  const [animationSpeed, setAnimationSpeed] = React.useState(10); // 1~100 속도값
+  const currentPositionIndexRef = React.useRef<number>(0);
+
+  // 시간 변수 추가
+  const startTimeRef = React.useRef<Date>(new Date());
+  const elapsedTimeRef = React.useRef<number>(0);
+  const clockSettingsRef = React.useRef<{
+    startTime: Cesium.JulianDate | null;
+    stopTime: Cesium.JulianDate | null;
+    currentTime: Cesium.JulianDate | null;
+    multiplier: number;
+  }>({
+    startTime: null,
+    stopTime: null,
+    currentTime: null,
+    multiplier: 10,
+  });
+
   const resetCamera = React.useCallback(async () => {
     if (cesiumViewer.current !== null) {
       const is3D = cesiumViewer.current.scene.mode === Cesium.SceneMode.SCENE3D;
@@ -155,155 +178,355 @@ export const CesiumComponent = ({
   }, [positions, cleanUpPrimitives]);
 
   const drawISSOrbit = React.useCallback(() => {
-    if (!cesiumViewer.current || !issPositions?.length) return;
+    try {
+      if (!cesiumViewer.current || !issPositions?.length) return;
 
-    const orbitPositions = issPositions.map((pos) => Cesium.Cartesian3.fromDegrees(pos.longitude, pos.latitude, pos.height));
+      // 모든 ISS 관련 엔티티 제거 - 더 강력한 방식으로 구현
+      const entitiesToRemove = ["ISS", "ISS_ORBIT", "ISS_X_AXIS", "ISS_Y_AXIS", "ISS_Z_AXIS"];
 
-    cesiumViewer.current.entities.add({
-      polyline: {
-        positions: orbitPositions,
-        width: 2,
-        material: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.2,
-          color: Cesium.Color.BLUE,
-        }),
-      },
-    });
+      // 1. ID로 명시적 제거 시도
+      entitiesToRemove.forEach((id) => {
+        try {
+          cesiumViewer.current?.entities.removeById(id);
+        } catch (e) {
+          // 엔티티가 존재하지 않으면 무시
+        }
+      });
 
-    // ISS 모델 추가
-    const issEntity = cesiumViewer.current.entities.add({
-      id: "ISS",
-      position: orbitPositions[0],
-      point: {
-        pixelSize: 20,
-        color: Cesium.Color.RED,
-        outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 2,
-      },
-      label: {
-        text: "ISS",
-        font: "14pt sans-serif",
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        outlineWidth: 2,
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        pixelOffset: new Cesium.Cartesian2(0, -9),
-      },
-    });
+      // 2. 엔티티 컬렉션을 순회하며 ID에 "ISS"가 포함된 모든 엔티티 제거
+      const allEntities = [...cesiumViewer.current.entities.values];
+      allEntities.forEach((entity) => {
+        if (entity.id && String(entity.id).includes("ISS")) {
+          try {
+            cesiumViewer.current?.entities.remove(entity);
+          } catch (e) {
+            console.warn("엔티티 제거 실패:", entity.id);
+          }
+        }
+      });
 
-    // ISS 기준 XYZ 축 추가
-    const axisScale = 100000; // 축 길이 (미터 단위)
+      const orbitPositions = issPositions.map((pos) => Cesium.Cartesian3.fromDegrees(pos.longitude, pos.latitude, pos.height));
 
-    // X축 (빨간색)
-    cesiumViewer.current.entities.add({
-      polyline: {
-        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-          const issPosition = issEntity.position?.getValue(time);
-          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+      // ISS 궤도 추가 (존재 여부 확인 후)
+      if (!cesiumViewer.current.entities.getById("ISS_ORBIT")) {
+        cesiumViewer.current.entities.add({
+          id: "ISS_ORBIT",
+          polyline: {
+            positions: orbitPositions,
+            width: 2,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: 0.2,
+              color: Cesium.Color.BLUE,
+            }),
+          },
+        });
+      }
 
-          const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
-          const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(axisScale, 0, 0), new Cesium.Cartesian3());
-          return [issPosition, endPoint];
-        }, false),
-        width: 2,
-        material: Cesium.Color.RED,
-      },
-      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-        const issPosition = issEntity.position?.getValue(time);
-        if (!issPosition) return orbitPositions[0];
+      // ISS 모델 추가 - 재확인 후 추가
+      if (!cesiumViewer.current.entities.getById("ISS")) {
+        const satelliteScale = 1000; // 모델 크기 조정 (필요에 따라 조정)
 
-        const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
-        const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(axisScale, 0, 0), new Cesium.Cartesian3());
-        return Cesium.Cartesian3.midpoint(issPosition, endPoint, new Cesium.Cartesian3());
-      }, false) as any,
-      label: {
-        text: "X",
-        font: "14pt sans-serif",
-        fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        outlineWidth: 2,
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-        pixelOffset: new Cesium.Cartesian2(0, 0),
-        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        show: true,
-      },
-    });
+        // 부드러운 이동을 위한 SampledPositionProperty 생성
+        const issPositionProperty = new Cesium.SampledPositionProperty();
 
-    // Y축 (초록색)
-    cesiumViewer.current.entities.add({
-      polyline: {
-        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-          const issPosition = issEntity.position?.getValue(time);
-          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+        // 시작 위치 설정
+        const startTime = Cesium.JulianDate.fromDate(new Date());
+        issPositionProperty.addSample(startTime, orbitPositions[0]);
 
-          const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
-          const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, axisScale, 0), new Cesium.Cartesian3());
-          return [issPosition, endPoint];
-        }, false),
-        width: 2,
-        material: Cesium.Color.GREEN,
-      },
-      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-        const issPosition = issEntity.position?.getValue(time);
-        if (!issPosition) return orbitPositions[0];
+        // 모든 위치를 샘플로 추가 (시간 간격 계산)
+        const orbitDurationSeconds = 5400; // 궤도 주기 90분
+        const timeStepSeconds = orbitDurationSeconds / orbitPositions.length;
 
-        const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
-        const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, axisScale, 0), new Cesium.Cartesian3());
-        return Cesium.Cartesian3.midpoint(issPosition, endPoint, new Cesium.Cartesian3());
-      }, false) as any,
-      label: {
-        text: "Y",
-        font: "14pt sans-serif",
-        fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        outlineWidth: 2,
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-        pixelOffset: new Cesium.Cartesian2(0, 0),
-        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        show: true,
-      },
-    });
+        // 궤도 전체에 샘플 추가
+        for (let i = 0; i < orbitPositions.length; i++) {
+          const sampleTime = Cesium.JulianDate.addSeconds(startTime, i * timeStepSeconds, new Cesium.JulianDate());
+          issPositionProperty.addSample(sampleTime, orbitPositions[i]);
+        }
 
-    // Z축 (파란색)
-    cesiumViewer.current.entities.add({
-      polyline: {
-        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-          const issPosition = issEntity.position?.getValue(time);
-          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+        // 마지막 지점 추가 (한 바퀴 더)
+        const endTime = Cesium.JulianDate.addSeconds(startTime, orbitDurationSeconds, new Cesium.JulianDate());
+        issPositionProperty.addSample(endTime, orbitPositions[0]);
 
-          const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
-          const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, 0, axisScale), new Cesium.Cartesian3());
-          return [issPosition, endPoint];
-        }, false),
-        width: 2,
-        material: Cesium.Color.BLUE,
-      },
-      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-        const issPosition = issEntity.position?.getValue(time);
-        if (!issPosition) return orbitPositions[0];
+        // 보간 설정 (현재 시간에 맞게 위치 계산)
+        issPositionProperty.setInterpolationOptions({
+          interpolationDegree: 3,
+          interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
+        });
 
-        const transform = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
-        const endPoint = Cesium.Matrix4.multiplyByPoint(transform, new Cesium.Cartesian3(0, 0, axisScale), new Cesium.Cartesian3());
-        return Cesium.Cartesian3.midpoint(issPosition, endPoint, new Cesium.Cartesian3());
-      }, false) as any,
-      label: {
-        text: "Z",
-        font: "14pt sans-serif",
-        fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        outlineWidth: 2,
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-        pixelOffset: new Cesium.Cartesian2(0, 0),
-        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        show: true,
-      },
-    });
-  }, [Cesium, issPositions]);
+        // 시계 설정 저장 (회전 시 초기화 방지)
+        clockSettingsRef.current = {
+          startTime, // 타입 오류를 방지하기 위해 간단한 할당 사용
+          stopTime: endTime,
+          currentTime: startTime,
+          multiplier: animationSpeed,
+        };
+
+        // 시계 설정 업데이트 (null 체크 추가)
+        if (clockSettingsRef.current.startTime) {
+          cesiumViewer.current.clock.startTime = clockSettingsRef.current.startTime;
+        }
+        if (clockSettingsRef.current.stopTime) {
+          cesiumViewer.current.clock.stopTime = clockSettingsRef.current.stopTime;
+        }
+        if (clockSettingsRef.current.currentTime) {
+          cesiumViewer.current.clock.currentTime = clockSettingsRef.current.currentTime;
+        }
+        cesiumViewer.current.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+        cesiumViewer.current.clock.multiplier = clockSettingsRef.current.multiplier;
+
+        const issEntity = cesiumViewer.current.entities.add({
+          id: "ISS",
+          // 부드러운 움직임을 위한 SampledPositionProperty 사용
+          position: issPositionProperty,
+          // 포인트 표시 대신 3D 모델 사용
+          model: {
+            uri: "/Cesium_Air.glb", // public 디렉토리의 위성 모델 경로
+            minimumPixelSize: 128,
+            maximumScale: 20000,
+            scale: satelliteScale,
+            runAnimations: false, // 애니메이션 비활성화
+            heightReference: Cesium.HeightReference.NONE,
+            color: Cesium.Color.WHITE,
+            silhouetteColor: Cesium.Color.WHITE,
+            silhouetteSize: 2.0,
+            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 20000000),
+          },
+          label: {
+            text: "ISS",
+            font: "14pt sans-serif",
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            outlineWidth: 2,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            pixelOffset: new Cesium.Cartesian2(0, -9),
+          },
+          // 모델 방향 설정 (위성의 진행 방향 기준 + 사용자 회전)
+          orientation: new Cesium.CallbackProperty((time) => {
+            if (!issPositions || issPositions.length < 2) return Cesium.Quaternion.IDENTITY;
+
+            // 현재 위치 가져오기
+            const currentPosition = issPositionProperty.getValue(time);
+            if (!currentPosition) return Cesium.Quaternion.IDENTITY;
+
+            // 약간 미래 시간 계산
+            const futureTime = Cesium.JulianDate.addSeconds(time, 1, new Cesium.JulianDate());
+            const futurePosition = issPositionProperty.getValue(futureTime);
+
+            if (!futurePosition) return Cesium.Quaternion.IDENTITY;
+
+            // 두 위치가 같으면 기본 방향 리턴
+            if (Cesium.Cartesian3.equals(currentPosition, futurePosition)) {
+              return Cesium.Quaternion.IDENTITY;
+            }
+
+            // 진행 방향과 위 방향으로 회전 계산
+            const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(currentPosition);
+
+            // 기본 회전 계산
+            const baseRotation = Cesium.Transforms.headingPitchRollQuaternion(currentPosition, new Cesium.HeadingPitchRoll(0, 0, 0));
+
+            // 사용자 회전 적용
+            const userRotation = Cesium.Quaternion.fromHeadingPitchRoll(
+              new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(rotation.yaw), Cesium.Math.toRadians(rotation.pitch), Cesium.Math.toRadians(rotation.roll))
+            );
+
+            // 회전 결합
+            return Cesium.Quaternion.multiply(baseRotation, userRotation, new Cesium.Quaternion());
+          }, false),
+        });
+
+        // 참조 저장
+        issEntityRef.current = issEntity;
+
+        // ISS 기준 XYZ 축 추가
+        const axisScale = 100000; // 축 길이 (미터 단위)
+
+        // X축 (빨간색)
+        if (!cesiumViewer.current.entities.getById("ISS_X_AXIS")) {
+          cesiumViewer.current.entities.add({
+            id: "ISS_X_AXIS",
+            polyline: {
+              positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+                const issPosition = issEntity.position?.getValue(time);
+                if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+
+                // 현재 ISS의 회전 행렬 가져오기
+                const orientation = issEntity.orientation?.getValue(time);
+                if (!orientation) return [issPosition, issPosition];
+
+                // 현재 회전을 적용한 축 방향 계산
+                const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+
+                // X축 방향 (1,0,0)을 모델 회전에 맞게 변환
+                const xAxis = new Cesium.Cartesian3(axisScale, 0, 0);
+                const rotatedXAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, xAxis, new Cesium.Cartesian3());
+
+                return [issPosition, rotatedXAxis];
+              }, false),
+              width: 2,
+              material: Cesium.Color.RED,
+            },
+            position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+              const issPosition = issEntity.position?.getValue(time);
+              if (!issPosition) return orbitPositions[0];
+
+              const orientation = issEntity.orientation?.getValue(time);
+              if (!orientation) return issPosition;
+
+              const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+
+              const xAxis = new Cesium.Cartesian3(axisScale, 0, 0);
+              const rotatedXAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, xAxis, new Cesium.Cartesian3());
+
+              return Cesium.Cartesian3.midpoint(issPosition, rotatedXAxis, new Cesium.Cartesian3());
+            }, false) as any,
+            label: {
+              text: "X",
+              font: "14pt sans-serif",
+              fillColor: Cesium.Color.YELLOW,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              outlineWidth: 2,
+              verticalOrigin: Cesium.VerticalOrigin.CENTER,
+              horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              pixelOffset: new Cesium.Cartesian2(0, 0),
+              eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              show: true,
+            },
+          });
+        }
+
+        // Y축 (초록색)
+        if (!cesiumViewer.current.entities.getById("ISS_Y_AXIS")) {
+          cesiumViewer.current.entities.add({
+            id: "ISS_Y_AXIS",
+            polyline: {
+              positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+                const issPosition = issEntity.position?.getValue(time);
+                if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+
+                // 현재 ISS의 회전 행렬 가져오기
+                const orientation = issEntity.orientation?.getValue(time);
+                if (!orientation) return [issPosition, issPosition];
+
+                // 현재 회전을 적용한 축 방향 계산
+                const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+
+                // Y축 방향 (0,1,0)을 모델 회전에 맞게 변환
+                const yAxis = new Cesium.Cartesian3(0, axisScale, 0);
+                const rotatedYAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, yAxis, new Cesium.Cartesian3());
+
+                return [issPosition, rotatedYAxis];
+              }, false),
+              width: 2,
+              material: Cesium.Color.GREEN,
+            },
+            position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+              const issPosition = issEntity.position?.getValue(time);
+              if (!issPosition) return orbitPositions[0];
+
+              const orientation = issEntity.orientation?.getValue(time);
+              if (!orientation) return issPosition;
+
+              const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+
+              const yAxis = new Cesium.Cartesian3(0, axisScale, 0);
+              const rotatedYAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, yAxis, new Cesium.Cartesian3());
+
+              return Cesium.Cartesian3.midpoint(issPosition, rotatedYAxis, new Cesium.Cartesian3());
+            }, false) as any,
+            label: {
+              text: "Y",
+              font: "14pt sans-serif",
+              fillColor: Cesium.Color.YELLOW,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              outlineWidth: 2,
+              verticalOrigin: Cesium.VerticalOrigin.CENTER,
+              horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              pixelOffset: new Cesium.Cartesian2(0, 0),
+              eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              show: true,
+            },
+          });
+        }
+
+        // Z축 (파란색)
+        if (!cesiumViewer.current.entities.getById("ISS_Z_AXIS")) {
+          cesiumViewer.current.entities.add({
+            id: "ISS_Z_AXIS",
+            polyline: {
+              positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+                const issPosition = issEntity.position?.getValue(time);
+                if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+
+                // 현재 ISS의 회전 행렬 가져오기
+                const orientation = issEntity.orientation?.getValue(time);
+                if (!orientation) return [issPosition, issPosition];
+
+                // 현재 회전을 적용한 축 방향 계산
+                const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+
+                // Z축 방향 (0,0,1)을 모델 회전에 맞게 변환
+                const zAxis = new Cesium.Cartesian3(0, 0, axisScale);
+                const rotatedZAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, zAxis, new Cesium.Cartesian3());
+
+                return [issPosition, rotatedZAxis];
+              }, false),
+              width: 2,
+              material: Cesium.Color.BLUE,
+            },
+            position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+              const issPosition = issEntity.position?.getValue(time);
+              if (!issPosition) return orbitPositions[0];
+
+              const orientation = issEntity.orientation?.getValue(time);
+              if (!orientation) return issPosition;
+
+              const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+
+              const zAxis = new Cesium.Cartesian3(0, 0, axisScale);
+              const rotatedZAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, zAxis, new Cesium.Cartesian3());
+
+              return Cesium.Cartesian3.midpoint(issPosition, rotatedZAxis, new Cesium.Cartesian3());
+            }, false) as any,
+            label: {
+              text: "Z",
+              font: "14pt sans-serif",
+              fillColor: Cesium.Color.YELLOW,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              outlineWidth: 2,
+              verticalOrigin: Cesium.VerticalOrigin.CENTER,
+              horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              pixelOffset: new Cesium.Cartesian2(0, 0),
+              eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              show: true,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error("ISS 엔티티 생성 중 오류 발생:", error);
+
+      // 심각한 오류 발생 시 ISS 관련 엔티티만 제거 및 로그 출력
+      try {
+        if (cesiumViewer.current) {
+          // 전체 엔티티 제거가 아닌 ISS 관련 엔티티만 제거
+          const allEntities = [...cesiumViewer.current.entities.values];
+          for (let i = 0; i < allEntities.length; i++) {
+            const entity = allEntities[i];
+            if (entity.id && String(entity.id).includes("ISS")) {
+              cesiumViewer.current.entities.remove(entity);
+            }
+          }
+          console.log("ISS 관련 엔티티가 모두 제거되었습니다. 다시 시도하세요.");
+        }
+      } catch (cleanupError) {
+        console.error("엔티티 정리 중 오류:", cleanupError);
+        alert("엔티티 처리 중 오류가 발생했습니다. 페이지를 새로고침 하세요.");
+      }
+    }
+  }, [Cesium, issPositions, rotation]);
 
   // 지상국 및 통신 범위 추가 함수 수정
   const addGroundStations = React.useCallback(() => {
@@ -390,6 +613,21 @@ export const CesiumComponent = ({
         sceneModePicker: true, // 모드 변경 버튼 활성화
       });
 
+      // 시계 설정 - ISS 움직임을 위한 설정
+      cesiumViewer.current.clock.shouldAnimate = true;
+      cesiumViewer.current.clock.multiplier = 1.0;
+      cesiumViewer.current.scene.requestRender();
+
+      // 클록 틱 이벤트 리스너 추가
+      cesiumViewer.current.clock.onTick.addEventListener(() => {
+        if (animating) {
+          cesiumViewer.current?.scene.requestRender();
+        }
+      });
+
+      // 모델 로드 준비 완료 로그
+      console.log("Cesium 초기화 완료, 모델을 표시할 준비가 되었습니다.");
+
       // 모드 변경 시 카메라 재설정
       cesiumViewer.current.scene.morphComplete.addEventListener(() => {
         resetCamera();
@@ -429,6 +667,52 @@ export const CesiumComponent = ({
   //NOTE: Example of a function that utilizes CesiumJs features
   const julianDate = dateToJulianDate(Cesium, new Date());
 
+  // 회전 적용 함수 (위치 유지를 위한 별도 함수)
+  const applyRotation = React.useCallback((newRotation: { yaw: number; pitch: number; roll: number }) => {
+    // 현재 시간 저장
+    if (cesiumViewer.current) {
+      const currentTime = cesiumViewer.current.clock.currentTime;
+
+      // 회전 상태 업데이트
+      setRotation(newRotation);
+
+      // 시간을 유지하여 위치 초기화 방지
+      // 약간의 지연을 통해 시간 설정이 안정적으로 적용되도록 함
+      setTimeout(() => {
+        if (cesiumViewer.current && Cesium.JulianDate.lessThan(currentTime, cesiumViewer.current.clock.stopTime)) {
+          cesiumViewer.current.clock.currentTime = currentTime;
+          cesiumViewer.current.scene.requestRender();
+        }
+      }, 10);
+    } else {
+      setRotation(newRotation);
+    }
+  }, []);
+
+  // Yaw 컨트롤 핸들러
+  const handleYawChange = (delta: number) => {
+    applyRotation({
+      ...rotation,
+      yaw: rotation.yaw + delta,
+    });
+  };
+
+  // Pitch 컨트롤 핸들러
+  const handlePitchChange = (delta: number) => {
+    applyRotation({
+      ...rotation,
+      pitch: rotation.pitch + delta,
+    });
+  };
+
+  // Roll 컨트롤 핸들러
+  const handleRollChange = (delta: number) => {
+    applyRotation({
+      ...rotation,
+      roll: rotation.roll + delta,
+    });
+  };
+
   // 버튼 컨테이너 스타일 추가
   const buttonContainerStyle: React.CSSProperties = {
     position: "absolute",
@@ -439,6 +723,30 @@ export const CesiumComponent = ({
     flexDirection: "column",
     gap: "10px",
     zIndex: 1000,
+  };
+
+  // 회전 컨트롤 스타일
+  const rotationControlStyle: React.CSSProperties = {
+    position: "absolute",
+    bottom: "20px",
+    right: "20px",
+    transform: "none",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    zIndex: 1000,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    padding: "10px",
+    borderRadius: "8px",
+    color: "white",
+    width: "360px",
+  };
+
+  // 회전 버튼 행 스타일
+  const rotationRowStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
   };
 
   // 공통 버튼 스타일 수정
@@ -454,6 +762,22 @@ export const CesiumComponent = ({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+  };
+
+  // 회전 버튼 스타일
+  const rotateButtonStyle: React.CSSProperties = {
+    width: "40px",
+    height: "30px",
+    padding: "0",
+    backgroundColor: "rgba(48, 48, 48, 0.8)",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "14px",
   };
 
   // 카메라 이동 함수 추가
@@ -527,6 +851,38 @@ export const CesiumComponent = ({
     });
   }, [Cesium]);
 
+  // 애니메이션 제어 스타일
+  const animationControlStyle: React.CSSProperties = {
+    position: "absolute",
+    bottom: "20px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    zIndex: 1000,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    padding: "10px",
+    borderRadius: "8px",
+    color: "white",
+    width: "300px",
+  };
+
+  // 애니메이션 속도 변경 시 시계 업데이트
+  React.useEffect(() => {
+    if (cesiumViewer.current) {
+      cesiumViewer.current.clock.multiplier = animationSpeed;
+    }
+  }, [animationSpeed]);
+
+  // animating 상태 변경 시 시계 설정 업데이트
+  React.useEffect(() => {
+    if (cesiumViewer.current) {
+      cesiumViewer.current.clock.shouldAnimate = animating;
+      cesiumViewer.current.scene.requestRender();
+    }
+  }, [animating]);
+
   return (
     <>
       <div style={buttonContainerStyle}>
@@ -565,6 +921,110 @@ export const CesiumComponent = ({
           </svg>
         </button>
       </div>
+
+      {/* ISS 애니메이션 제어 추가 */}
+      <div style={animationControlStyle}>
+        <div style={{ textAlign: "center", marginBottom: "5px", fontWeight: "bold" }}>ISS 이동 제어</div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button
+            onClick={() => setAnimating(!animating)}
+            style={{
+              ...rotateButtonStyle,
+              width: "100px",
+              backgroundColor: animating ? "rgba(0, 180, 0, 0.8)" : "rgba(180, 0, 0, 0.8)",
+            }}
+          >
+            {animating ? "정지" : "이동"}
+          </button>
+
+          <button
+            onClick={() => {
+              if (cesiumViewer.current) {
+                // 시계를 시작 시간으로 리셋
+                cesiumViewer.current.clock.currentTime = cesiumViewer.current.clock.startTime;
+                startTimeRef.current = new Date();
+                elapsedTimeRef.current = 0;
+                currentPositionIndexRef.current = 0;
+              }
+            }}
+            style={{ ...rotateButtonStyle, width: "100px" }}
+          >
+            초기화
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ width: "50px" }}>속도:</span>
+          <input type="range" min="1" max="100" value={animationSpeed} onChange={(e) => setAnimationSpeed(parseInt(e.target.value))} style={{ flex: 1 }} />
+          <span style={{ width: "30px", textAlign: "right" }}>{animationSpeed}x</span>
+        </div>
+      </div>
+
+      {/* ISS 회전 컨트롤 추가 */}
+      <div style={rotationControlStyle}>
+        <div style={{ textAlign: "center", marginBottom: "5px", fontWeight: "bold" }}>ISS 회전 컨트롤</div>
+
+        {/* Yaw 컨트롤 */}
+        <div style={rotationRowStyle}>
+          <span style={{ width: "50px" }}>Yaw:</span>
+          <button onClick={() => handleYawChange(-5)} style={rotateButtonStyle}>
+            -5°
+          </button>
+          <button onClick={() => handleYawChange(-1)} style={rotateButtonStyle}>
+            -1°
+          </button>
+          <span style={{ width: "40px", textAlign: "center" }}>{rotation.yaw}°</span>
+          <button onClick={() => handleYawChange(1)} style={rotateButtonStyle}>
+            +1°
+          </button>
+          <button onClick={() => handleYawChange(5)} style={rotateButtonStyle}>
+            +5°
+          </button>
+        </div>
+
+        {/* Pitch 컨트롤 */}
+        <div style={rotationRowStyle}>
+          <span style={{ width: "50px" }}>Pitch:</span>
+          <button onClick={() => handlePitchChange(-5)} style={rotateButtonStyle}>
+            -5°
+          </button>
+          <button onClick={() => handlePitchChange(-1)} style={rotateButtonStyle}>
+            -1°
+          </button>
+          <span style={{ width: "40px", textAlign: "center" }}>{rotation.pitch}°</span>
+          <button onClick={() => handlePitchChange(1)} style={rotateButtonStyle}>
+            +1°
+          </button>
+          <button onClick={() => handlePitchChange(5)} style={rotateButtonStyle}>
+            +5°
+          </button>
+        </div>
+
+        {/* Roll 컨트롤 */}
+        <div style={rotationRowStyle}>
+          <span style={{ width: "50px" }}>Roll:</span>
+          <button onClick={() => handleRollChange(-5)} style={rotateButtonStyle}>
+            -5°
+          </button>
+          <button onClick={() => handleRollChange(-1)} style={rotateButtonStyle}>
+            -1°
+          </button>
+          <span style={{ width: "40px", textAlign: "center" }}>{rotation.roll}°</span>
+          <button onClick={() => handleRollChange(1)} style={rotateButtonStyle}>
+            +1°
+          </button>
+          <button onClick={() => handleRollChange(5)} style={rotateButtonStyle}>
+            +5°
+          </button>
+        </div>
+
+        {/* 회전 초기화 버튼 */}
+        <button onClick={() => setRotation({ yaw: 0, pitch: 0, roll: 0 })} style={{ ...rotateButtonStyle, width: "100%", marginTop: "5px" }}>
+          초기화
+        </button>
+      </div>
+
       <div ref={cesiumContainerRef} id="cesium-container" style={{ height: "100vh", width: "100vw" }} />
     </>
   );
