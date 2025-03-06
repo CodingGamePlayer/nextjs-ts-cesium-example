@@ -44,3 +44,25 @@ export interface ViewerRefs {
   addedScenePrimitives: React.MutableRefObject<Cesium3DTileset[]>;
   issEntityRef: React.MutableRefObject<Entity | null>;
 }
+
+// 모델 뷰 모드 타입 정의
+export type ModelViewMode =
+  | "default" // 기본 뷰
+  | "front" // 정면 뷰
+  | "back" // 후면 뷰
+  | "top" // 상단 뷰
+  | "bottom" // 하단 뷰
+  | "left" // 좌측 뷰
+  | "right" // 우측 뷰
+  | "isometric" // 등각 뷰
+  | "custom"; // 사용자 정의 뷰
+
+// 모델 뷰 설정 타입 정의
+export interface ModelViewConfig {
+  mode: ModelViewMode;
+  position?: Cesium.Cartesian3;
+  heading?: number;
+  pitch?: number;
+  roll?: number;
+  zoom?: number;
+}

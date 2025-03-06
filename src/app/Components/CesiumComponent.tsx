@@ -1,24 +1,28 @@
 "use client";
 
-import React from "react";
 import * as Cesium from "cesium";
 import { Cesium3DTileset, Entity, Viewer } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
-import { dateToJulianDate } from "../example_utils/date";
+import React from "react";
 
 // 타입 임포트
-import { CesiumComponentProps, RotationState, ViewerRefs } from "./types/CesiumTypes";
+import { CesiumComponentProps, ModelViewConfig, ModelViewMode, RotationState, ViewerRefs } from "./types/CesiumTypes";
 
 // 유틸리티 함수 임포트
-import { resetCamera, cleanUpPrimitives, flyToISS, flyToKorea, flyToSunView } from "./utils/CesiumUtils";
+import { cleanUpPrimitives, flyToISS, resetCamera } from "./utils/CesiumUtils";
 import { drawISSOrbit } from "./utils/ISSUtils";
+import { applyModelView, highlightModel, setWireframeMode, toggleBoundingBox } from "./utils/ModelViewUtils";
 
 // 컨트롤 컴포넌트 임포트
+import ModelOptionsPanel from "./controls/ModelOptionsPanel";
+import MultiViewController from "./controls/MultiViewController";
 import RotationControl from "./controls/RotationControl";
-import NavigationButtons from "./controls/NavigationButtons";
 
 export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumComponentProps) => {
   if (!CesiumJs) return null;
+
+  // 일반 상수 (useState 대신 직접 선언)
+  const SHOW_TRAJECTORY = false;
 
   // 뷰어 관련 참조
   const cesiumViewer = React.useRef<Viewer | null>(null);
@@ -32,6 +36,12 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
   const [rotation, setRotation] = React.useState<RotationState>({ yaw: 0, pitch: 0, roll: 0 });
   const [animating, setAnimating] = React.useState(true);
   const [animationSpeed, setAnimationSpeed] = React.useState(10);
+  const [currentViewMode, setCurrentViewMode] = React.useState<ModelViewMode>("default");
+  const [zoomLevel, setZoomLevel] = React.useState<number>(1000000);
+  const [showWireframe, setShowWireframe] = React.useState<boolean>(false);
+  const [showBoundingBox, setShowBoundingBox] = React.useState<boolean>(false);
+  const [showHighlight, setShowHighlight] = React.useState<boolean>(false);
+  const [trackingEnabled, setTrackingEnabled] = React.useState<boolean>(true);
 
   // 뷰어 참조 객체
   const viewerRefs: ViewerRefs = {
@@ -150,22 +160,240 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
     setRotation({ yaw: 0, pitch: 0, roll: 0 });
   };
 
+  // 하단 뷰 관련 추가 기능 - 조명 및 렌더링 설정
+  const configureViewSettings = React.useCallback((mode: ModelViewMode) => {
+    if (!cesiumViewer.current) return;
+
+    // 모든 뷰에 대한 기본 설정
+    cesiumViewer.current.scene.globe.enableLighting = true;
+
+    // 하단 뷰에 대한 특별한 설정
+    if (mode === "bottom") {
+      // 렌더링 품질 향상
+      cesiumViewer.current.scene.postProcessStages.fxaa.enabled = true; // 안티앨리어싱 활성화
+
+      // 깊이 테스트 비활성화로 모델이 더 잘 보이게 함
+      cesiumViewer.current.scene.globe.depthTestAgainstTerrain = false;
+
+      // 모델을 강조하기 위한 설정
+      if (cesiumViewer.current.scene.primitives && issEntityRef.current) {
+        // 씬의 다른 요소들의 밝기를 줄임
+        cesiumViewer.current.scene.globe.translucency.enabled = true;
+        cesiumViewer.current.scene.globe.translucency.frontFaceAlpha = 0.5;
+      }
+
+      // 다중 조명 설정 (모델을 여러 방향에서 비추도록)
+      const time = cesiumViewer.current.clock.currentTime;
+      if (issEntityRef.current) {
+        const issPosition = issEntityRef.current.position?.getValue(time);
+
+        if (issPosition) {
+          // 하단에서 위로 향하는 주 조명
+          cesiumViewer.current.scene.light = new Cesium.DirectionalLight({
+            direction: Cesium.Cartesian3.normalize(
+              new Cesium.Cartesian3(0, 0, 1), // 아래에서 위로
+              new Cesium.Cartesian3()
+            ),
+            intensity: 3.0, // 더 밝게
+            color: Cesium.Color.WHITE,
+          });
+
+          // 조명 효과 강화를 위한 추가 설정
+          cesiumViewer.current.scene.globe.enableLighting = true;
+          cesiumViewer.current.scene.shadowMap.enabled = true;
+          cesiumViewer.current.scene.shadowMap.softShadows = true;
+
+          // 모델을 더 선명하게 하는 설정
+          try {
+            // @ts-ignore - 내부 속성 접근
+            if (cesiumViewer.current.scene.model && cesiumViewer.current.scene.model.silhouetteSize) {
+              // @ts-ignore
+              cesiumViewer.current.scene.model.silhouetteSize = 1.0;
+              // @ts-ignore
+              cesiumViewer.current.scene.model.silhouetteColor = Cesium.Color.WHITE;
+            }
+          } catch (e) {
+            console.log("모델 강조 설정 중 오류", e);
+          }
+        }
+      }
+    } else {
+      // 다른 뷰에서는 기본 설정으로 복원
+      cesiumViewer.current.scene.light = new Cesium.SunLight();
+      cesiumViewer.current.scene.globe.depthTestAgainstTerrain = true;
+      cesiumViewer.current.scene.globe.translucency.enabled = false;
+      cesiumViewer.current.scene.shadowMap.enabled = false;
+    }
+  }, []);
+
+  // 뷰 모드 변경 핸들러
+  const handleViewModeChange = React.useCallback(
+    (mode: ModelViewMode) => {
+      // 뷰 모드 상태 업데이트
+      setCurrentViewMode(mode);
+
+      // 뷰 모드에 따른 특수 설정 적용
+      configureViewSettings(mode);
+
+      // 모드에 해당하는 뷰 적용
+      const viewConfig: ModelViewConfig = {
+        mode,
+        zoom: zoomLevel,
+      };
+
+      // ISS가 있다면 해당 엔티티에 초점을 맞춥니다
+      if (issEntityRef.current && cesiumViewer.current) {
+        // 먼저 추적을 중지하여 카메라 설정이 가능하도록 함
+        cesiumViewer.current.trackedEntity = undefined;
+
+        // 현재 시간 기준 ISS 위치 획득
+        const currentTime = cesiumViewer.current.clock.currentTime;
+        const issPosition = issEntityRef.current.position?.getValue(currentTime);
+        const issOrientation = issEntityRef.current.orientation?.getValue(currentTime);
+
+        if (issPosition && issOrientation) {
+          // ISS 모델의 위치와 방향에 따른 변환 행렬 계산
+          const modelMatrix = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromQuaternion(issOrientation), issPosition);
+
+          // 뷰 모드에 따른 오프셋 방향과 각도 설정
+          let headingRadians = 0;
+          let pitchRadians = 0;
+          // 뷰 모드에 따른 줌 레벨 설정 (하단 뷰만 더 가깝게)
+          let currentZoomLevel = zoomLevel;
+
+          switch (mode) {
+            case "front":
+              headingRadians = Cesium.Math.toRadians(270);
+              pitchRadians = 0;
+              break;
+            case "back":
+              headingRadians = Cesium.Math.toRadians(90);
+              pitchRadians = 0;
+              break;
+            case "left":
+              headingRadians = Cesium.Math.toRadians(180);
+              pitchRadians = 0;
+              break;
+            case "right":
+              headingRadians = 0;
+              pitchRadians = 0;
+              break;
+            case "top":
+              headingRadians = 0;
+              pitchRadians = Cesium.Math.toRadians(-90);
+              break;
+            case "bottom":
+              // 하단 뷰 각도 조정 - 더 낮은 각도로 수정하여 모델이 더 잘 보이게 함
+              headingRadians = Cesium.Math.toRadians(0);
+              pitchRadians = Cesium.Math.toRadians(60); // 60도로 수정 (더 기울어진 각도)
+              // 하단 뷰에서만 더 가까운 줌 레벨 적용 (기본 값의 약 50%)
+              currentZoomLevel = zoomLevel * 0.5;
+              break;
+            case "default":
+            default:
+              headingRadians = Cesium.Math.toRadians(45);
+              pitchRadians = Cesium.Math.toRadians(-30);
+              break;
+          }
+
+          // 추적 활성화
+          setTrackingEnabled(true);
+
+          // ISS 모델에 대한 변환 행렬 생성 및 저장
+          const viewMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(issPosition);
+
+          // 카메라 오프셋 계산 (회전 보정 포함) - 뷰 모드별 줌 레벨 적용
+          const cameraOffset = new Cesium.HeadingPitchRange(headingRadians, pitchRadians, currentZoomLevel);
+
+          // 오프셋 적용
+          cesiumViewer.current.scene.camera.lookAt(issPosition, cameraOffset);
+
+          // 다시 트래킹 모드로 설정
+          cesiumViewer.current.trackedEntity = issEntityRef.current;
+
+          // 지속적인 카메라 조정을 위한 이벤트 리스너
+          const cameraTrackingListener = () => {
+            if (!trackingEnabled || !cesiumViewer.current || !issEntityRef.current) return;
+
+            const time = cesiumViewer.current.clock.currentTime;
+            const position = issEntityRef.current.position?.getValue(time);
+            const orientation = issEntityRef.current.orientation?.getValue(time);
+
+            if (position && orientation) {
+              // 모델 좌표계 기준 변환 행렬 계산
+              const modelMatrix = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromQuaternion(orientation), position);
+
+              // 모델 위치를 기준으로 한 변환 행렬 설정 - 뷰 모드별 줌 레벨 적용
+              cesiumViewer.current.scene.camera.lookAt(position, new Cesium.HeadingPitchRange(headingRadians, pitchRadians, currentZoomLevel));
+            }
+          };
+
+          // 기존 리스너 제거 및 새 리스너 등록
+          cesiumViewer.current.scene.preRender.removeEventListener(cameraTrackingListener);
+          cesiumViewer.current.scene.preRender.addEventListener(cameraTrackingListener);
+
+          // 즉시 한 번 렌더링 요청하여 카메라 위치 업데이트
+          cesiumViewer.current.scene.requestRender();
+        }
+      } else {
+        // ISS가 없으면 일반적인 뷰 적용
+        applyModelView(cesiumViewer.current, viewConfig);
+      }
+    },
+    [zoomLevel, trackingEnabled]
+  );
+
+  // 카메라 위치 업데이트 함수 추가
+  const updateCameraPosition = React.useCallback(() => {
+    if (!cesiumViewer.current || !issEntityRef.current || !trackingEnabled) return;
+
+    // 현재 선택된 뷰 모드에 따라 카메라 위치 다시 계산
+    handleViewModeChange(currentViewMode);
+  }, [currentViewMode, trackingEnabled, handleViewModeChange]);
+
+  // 줌 레벨 변경시 카메라 업데이트 추가
+  const handleZoomChange = React.useCallback(
+    (value: number) => {
+      setZoomLevel(value);
+
+      // 추적 모드에서는 즉시 카메라 위치 업데이트
+      if (trackingEnabled && issEntityRef.current) {
+        setTimeout(() => {
+          handleViewModeChange(currentViewMode);
+        }, 10);
+      } else {
+        // 추적 모드가 아닌 경우 기존 방식 사용
+        const viewConfig: ModelViewConfig = {
+          mode: currentViewMode,
+          zoom: value,
+        };
+
+        if (issEntityRef.current) {
+          applyModelView(cesiumViewer.current, viewConfig, issEntityRef.current.id);
+        } else {
+          applyModelView(cesiumViewer.current, viewConfig);
+        }
+      }
+    },
+    [currentViewMode, trackingEnabled, handleViewModeChange]
+  );
+
   React.useEffect(() => {
     if (cesiumViewer.current === null && cesiumContainerRef.current) {
       Cesium.Ion.defaultAccessToken = `${process.env.NEXT_PUBLIC_CESIUM_TOKEN}`;
 
       cesiumViewer.current = new Cesium.Viewer(cesiumContainerRef.current, {
         terrain: Cesium.Terrain.fromWorldTerrain(),
-        baseLayerPicker: true,
+        baseLayerPicker: false, // 레이어 변경 버튼 제거
         navigationHelpButton: false,
-        homeButton: true,
-        geocoder: true,
+        homeButton: false, // 홈 버튼 제거
+        geocoder: false, // 지명 검색 기능 제거
         animation: false,
         timeline: false,
-        shadows: true,
+        shadows: false,
         terrainShadows: Cesium.ShadowMode.ENABLED,
         sceneMode: Cesium.SceneMode.SCENE3D, // 초기 모드를 3D로 설정
-        sceneModePicker: true, // 모드 변경 버튼 활성화
+        sceneModePicker: false, // 2D/3D 변경 버튼 제거
         creditContainer: document.createElement("div"), // 빈 div 요소 사용
         orderIndependentTranslucency: true,
         fullscreenButton: false,
@@ -350,13 +578,6 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
     }
   }, [isLoaded, issPositions, rotation, animationSpeed]);
 
-  // 지상국 추가 useEffect
-  // React.useEffect(() => {
-  //   if (isLoaded) {
-  //     addGroundStations(cesiumViewer.current, groundStations);
-  //   }
-  // }, [isLoaded, groundStations]);
-
   // 애니메이션 속도 변경 시 시계 업데이트
   React.useEffect(() => {
     if (cesiumViewer.current) {
@@ -372,14 +593,57 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
     }
   }, [animating]);
 
+  // 뷰 모드 변경 시 효과
+  React.useEffect(() => {
+    if (isLoaded && currentViewMode !== "default") {
+      // 모드가 변경되면 해당 뷰를 적용
+      handleViewModeChange(currentViewMode);
+    }
+  }, [isLoaded, currentViewMode, handleViewModeChange]);
+
+  // 와이어프레임, 바운딩 박스, 하이라이트 설정 변경 시 효과
+  React.useEffect(() => {
+    if (isLoaded && issEntityRef.current) {
+      // 설정 적용
+      setWireframeMode(cesiumViewer.current, showWireframe);
+      toggleBoundingBox(cesiumViewer.current, issEntityRef.current.id, showBoundingBox);
+      highlightModel(cesiumViewer.current, issEntityRef.current.id, showHighlight);
+    }
+  }, [isLoaded, showWireframe, showBoundingBox, showHighlight]);
+
+  // Clock 상태 변경 관련 이펙트
+  React.useEffect(() => {
+    if (cesiumViewer.current) {
+      // 애니메이션 속도 설정
+      cesiumViewer.current.clock.multiplier = animationSpeed;
+
+      // 애니메이션 상태 설정
+      cesiumViewer.current.clock.shouldAnimate = animating;
+
+      // 카메라 추적이 활성화된 경우 카메라 위치 업데이트
+      if (trackingEnabled && issEntityRef.current) {
+        updateCameraPosition();
+      }
+
+      cesiumViewer.current.scene.requestRender();
+    }
+  }, [animationSpeed, animating, trackingEnabled, updateCameraPosition]);
+
+  // 추적 모드 변경 감지 및 적용
+  React.useEffect(() => {
+    if (cesiumViewer.current && issEntityRef.current) {
+      if (trackingEnabled) {
+        // 추적 모드 활성화 시 현재 뷰 모드에 맞게 카메라 업데이트
+        handleViewModeChange(currentViewMode);
+      } else {
+        // 추적 모드 비활성화 시 추적 엔티티 해제
+        cesiumViewer.current.trackedEntity = undefined;
+      }
+    }
+  }, [trackingEnabled, currentViewMode, handleViewModeChange]);
+
   return (
     <>
-      <NavigationButtons
-        onFlyToISS={() => flyToISS(cesiumViewer.current, false)}
-        onFlyToKorea={() => flyToKorea(cesiumViewer.current)}
-        onFlyToSunView={() => flyToSunView(cesiumViewer.current)}
-      />
-
       <RotationControl
         rotation={rotation}
         onYawChange={handleYawChange}
@@ -387,6 +651,10 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
         onRollChange={handleRollChange}
         onReset={handleRotationReset}
       />
+
+      <ModelOptionsPanel onZoomChange={handleZoomChange} />
+
+      <MultiViewController currentView={currentViewMode} onViewChange={handleViewModeChange} />
 
       <div ref={cesiumContainerRef} id="cesium-container" style={{ height: "100vh", width: "100vw" }} />
     </>
