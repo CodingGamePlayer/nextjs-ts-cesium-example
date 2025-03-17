@@ -66,8 +66,8 @@ export type ModelViewMode =
   | "bottom" // 하단 뷰
   | "left" // 좌측 뷰
   | "right" // 우측 뷰
-  | "isometric" // 등각 뷰
-  | "custom"; // 사용자 정의 뷰
+  | "sunView" // 태양 방향 뷰
+  | "towardsSun"; // 태양 바라보기
 
 // 모델 뷰 설정 타입 정의
 export interface ModelViewConfig {

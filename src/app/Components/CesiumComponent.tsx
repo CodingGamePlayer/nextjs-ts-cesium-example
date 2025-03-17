@@ -72,9 +72,6 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions: initialIssP
 
       // 이미 모델이 로드되어 있으면 궤도만 갱신
       if (isLoaded && cesiumViewer.current) {
-        // 기존 ISS 엔티티 참조 보존
-        const currentIssEntity = issEntityRef.current;
-
         // 새 궤도 그리기
         const result = drawISSOrbit(cesiumViewer.current, newPositions, rotation, animationSpeed);
 
@@ -91,7 +88,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions: initialIssP
         }
       }
     }
-  }, [tleLine1, tleLine2, isLoaded, cesiumViewer, rotation, animationSpeed, trackingEnabled, handleViewModeChange, currentViewMode]);
+  }, [tleLine1, tleLine2, isLoaded, cesiumViewer, rotation, animationSpeed, trackingEnabled, handleViewModeChange, currentViewMode, issEntityRef]);
 
   // 1분마다 궤도 갱신 타이머 설정
   useEffect(() => {
@@ -109,7 +106,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions: initialIssP
     return () => {
       clearInterval(intervalId);
     };
-  }, [isLoaded, updateOrbit]);
+  }, [isLoaded, updateOrbit, ORBIT_UPDATE_INTERVAL]);
 
   // 기존 useEffect 수정 (초기 로드 시에만 실행)
   useEffect(() => {
@@ -124,7 +121,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions: initialIssP
         }
       }
     }
-  }, [isLoaded, rotation, animationSpeed, cesiumViewer, issEntityRef, handleViewModeChange]);
+  }, [isLoaded, rotation, animationSpeed, cesiumViewer, issEntityRef, handleViewModeChange, issPositions]);
 
   // 초기 Cesium 초기화
   useEffect(() => {

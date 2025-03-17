@@ -124,15 +124,22 @@ export const getViewConfiguration = (
         pitch: 0,
       };
 
-    case "isometric":
-      // 등각 뷰 (45도 회전, 35도 경사)
+    case "sunView":
+      // 태양 방향 뷰
       return {
         ...defaultConfig,
         heading: Cesium.Math.toRadians(45),
         pitch: Cesium.Math.toRadians(-35),
       };
 
-    case "custom":
+    case "towardsSun":
+      // 태양 방향 뷰
+      return {
+        ...defaultConfig,
+        heading: Cesium.Math.toRadians(45),
+        pitch: Cesium.Math.toRadians(-35),
+      };
+
     default:
       return defaultConfig;
   }

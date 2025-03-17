@@ -60,6 +60,9 @@ const MultiViewController: React.FC<MultiViewControllerProps> = ({ currentView, 
       <button style={getButtonStyle("right")} onClick={() => onViewChange("right")} title="우측 뷰">
         우측
       </button>
+      <button style={getButtonStyle("sunView")} onClick={() => onViewChange("sunView")} title="태양 방향 뷰">
+        태양 방향
+      </button>
     </div>
   );
 };

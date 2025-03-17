@@ -185,7 +185,7 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
 
 // ISS 축 추가 함수
 const addISSAxes = (cesiumViewer: Viewer, issEntity: Cesium.Entity, orbitPositions: Cesium.Cartesian3[]) => {
-  const axisScale = 100000; // 축 길이 (미터 단위)
+  const axisScale = 300000; // 축 길이 (미터 단위)
 
   // 축 추가 함수 (축별 중복 코드 제거를 위한 헬퍼 함수)
   const addAxisEntity = (axisId: string, axisDirection: Cesium.Cartesian3, axisColor: Cesium.Color, axisLabel: string) => {
