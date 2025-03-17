@@ -66,6 +66,12 @@ export function useCesium() {
 
       cesiumViewer.current.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK_MULTIPLIER;
 
+      // 스크롤 줌 관련 설정
+      cesiumViewer.current.scene.screenSpaceCameraController.enableZoom = true; // 줌 활성화
+      cesiumViewer.current.scene.screenSpaceCameraController.zoomEventTypes = [Cesium.CameraEventType.WHEEL, Cesium.CameraEventType.PINCH]; // 휠과 핀치 모두 줌 이벤트로 설정
+      cesiumViewer.current.scene.screenSpaceCameraController.minimumZoomDistance = 10000; // 최소 줌 거리 (m)
+      cesiumViewer.current.scene.screenSpaceCameraController.maximumZoomDistance = 10000000; // 최대 줌 거리 (m)
+
       console.log("Cesium 초기화 완료, 모델을 표시할 준비가 되었습니다.");
       return true;
     }

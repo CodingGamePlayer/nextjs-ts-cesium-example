@@ -187,173 +187,66 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
 const addISSAxes = (cesiumViewer: Viewer, issEntity: Cesium.Entity, orbitPositions: Cesium.Cartesian3[]) => {
   const axisScale = 100000; // 축 길이 (미터 단위)
 
-  // X축 (빨간색)
-  if (!cesiumViewer.entities.getById("ISS_X_AXIS")) {
-    cesiumViewer.entities.add({
-      id: "ISS_X_AXIS",
-      polyline: {
-        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+  // 축 추가 함수 (축별 중복 코드 제거를 위한 헬퍼 함수)
+  const addAxisEntity = (axisId: string, axisDirection: Cesium.Cartesian3, axisColor: Cesium.Color, axisLabel: string) => {
+    if (!cesiumViewer.entities.getById(axisId)) {
+      cesiumViewer.entities.add({
+        id: axisId,
+        polyline: {
+          positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
+            const issPosition = issEntity.position?.getValue(time);
+            if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+
+            // 현재 ISS의 회전 행렬 가져오기
+            const orientation = issEntity.orientation?.getValue(time);
+            if (!orientation) return [issPosition, issPosition];
+
+            // 현재 회전을 적용한 축 방향 계산
+            const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+
+            // 축 방향을 모델 회전에 맞게 변환
+            const rotatedAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, axisDirection, new Cesium.Cartesian3());
+
+            return [issPosition, rotatedAxis];
+          }, false),
+          width: 2,
+          material: axisColor,
+        },
+        position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
           const issPosition = issEntity.position?.getValue(time);
-          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
+          if (!issPosition) return orbitPositions[0];
 
-          // 현재 ISS의 회전 행렬 가져오기
           const orientation = issEntity.orientation?.getValue(time);
-          if (!orientation) return [issPosition, issPosition];
+          if (!orientation) return issPosition;
 
-          // 현재 회전을 적용한 축 방향 계산
           const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
 
-          // X축 방향 (1,0,0)을 모델 회전에 맞게 변환
-          const xAxis = new Cesium.Cartesian3(axisScale, 0, 0);
-          const rotatedXAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, xAxis, new Cesium.Cartesian3());
+          // 축 방향을 모델 회전에 맞게 변환
+          const rotatedAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, axisDirection, new Cesium.Cartesian3());
 
-          return [issPosition, rotatedXAxis];
-        }, false),
-        width: 2,
-        material: Cesium.Color.RED,
-      },
-      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-        const issPosition = issEntity.position?.getValue(time);
-        if (!issPosition) return orbitPositions[0];
+          return rotatedAxis; // 끝점 직접 반환
+        }, false) as any,
+        label: {
+          text: axisLabel,
+          font: "14pt sans-serif",
+          fillColor: Cesium.Color.YELLOW,
+          style: Cesium.LabelStyle.FILL,
+          outlineWidth: 2,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+          pixelOffset: new Cesium.Cartesian2(-5, 0),
+          eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          show: true,
+        },
+      });
+    }
+  };
 
-        const orientation = issEntity.orientation?.getValue(time);
-        if (!orientation) return issPosition;
+  // X, Y, Z 축 추가
+  addAxisEntity("ISS_X_AXIS", new Cesium.Cartesian3(axisScale, 0, 0), Cesium.Color.RED, "X");
 
-        const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
+  addAxisEntity("ISS_Y_AXIS", new Cesium.Cartesian3(0, axisScale, 0), Cesium.Color.GREEN, "Y");
 
-        const xAxis = new Cesium.Cartesian3(axisScale, 0, 0);
-        const rotatedXAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, xAxis, new Cesium.Cartesian3());
-
-        // 중간점(midpoint) 대신 선의 끝점을 반환하도록 수정
-        return rotatedXAxis;
-      }, false) as any,
-      label: {
-        text: "X",
-        font: "14pt sans-serif",
-        fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL,
-        outlineWidth: 2,
-        // 정렬 설정 수정 - 수평 정렬을 왼쪽으로 설정
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
-        // 약간의 오프셋 추가
-        pixelOffset: new Cesium.Cartesian2(-5, 0),
-        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        show: true,
-      },
-    });
-  }
-
-  // Y축 (초록색)
-  if (!cesiumViewer.entities.getById("ISS_Y_AXIS")) {
-    cesiumViewer.entities.add({
-      id: "ISS_Y_AXIS",
-      polyline: {
-        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-          const issPosition = issEntity.position?.getValue(time);
-          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
-
-          // 현재 ISS의 회전 행렬 가져오기
-          const orientation = issEntity.orientation?.getValue(time);
-          if (!orientation) return [issPosition, issPosition];
-
-          // 현재 회전을 적용한 축 방향 계산
-          const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
-
-          // Y축 방향 (0,1,0)을 모델 회전에 맞게 변환
-          const yAxis = new Cesium.Cartesian3(0, axisScale, 0);
-          const rotatedYAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, yAxis, new Cesium.Cartesian3());
-
-          return [issPosition, rotatedYAxis];
-        }, false),
-        width: 2,
-        material: Cesium.Color.GREEN,
-      },
-      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-        const issPosition = issEntity.position?.getValue(time);
-        if (!issPosition) return orbitPositions[0];
-
-        const orientation = issEntity.orientation?.getValue(time);
-        if (!orientation) return issPosition;
-
-        const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
-
-        const yAxis = new Cesium.Cartesian3(0, axisScale, 0);
-        const rotatedYAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, yAxis, new Cesium.Cartesian3());
-
-        // 중간점 대신 끝점 반환
-        return rotatedYAxis;
-      }, false) as any,
-      label: {
-        text: "Y",
-        font: "14pt sans-serif",
-        fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL,
-        outlineWidth: 2,
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
-        pixelOffset: new Cesium.Cartesian2(-5, 0),
-        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        show: true,
-      },
-    });
-  }
-
-  // Z축 (파란색)
-  if (!cesiumViewer.entities.getById("ISS_Z_AXIS")) {
-    cesiumViewer.entities.add({
-      id: "ISS_Z_AXIS",
-      polyline: {
-        positions: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-          const issPosition = issEntity.position?.getValue(time);
-          if (!issPosition) return [orbitPositions[0], orbitPositions[0]];
-
-          // 현재 ISS의 회전 행렬 가져오기
-          const orientation = issEntity.orientation?.getValue(time);
-          if (!orientation) return [issPosition, issPosition];
-
-          // 현재 회전을 적용한 축 방향 계산
-          const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
-
-          // Z축 방향 (0,0,1)을 모델 회전에 맞게 변환
-          const zAxis = new Cesium.Cartesian3(0, 0, axisScale);
-          const rotatedZAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, zAxis, new Cesium.Cartesian3());
-
-          return [issPosition, rotatedZAxis];
-        }, false),
-        width: 2,
-        material: Cesium.Color.BLUE,
-      },
-      position: new Cesium.CallbackProperty((time: Cesium.JulianDate) => {
-        const issPosition = issEntity.position?.getValue(time);
-        if (!issPosition) return orbitPositions[0];
-
-        const orientation = issEntity.orientation?.getValue(time);
-        if (!orientation) return issPosition;
-
-        const modelMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(issPosition, orientation, new Cesium.Cartesian3(1, 1, 1));
-
-        const zAxis = new Cesium.Cartesian3(0, 0, axisScale);
-        const rotatedZAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, zAxis, new Cesium.Cartesian3());
-
-        // 중간점 대신 끝점 반환
-        return rotatedZAxis;
-      }, false) as any,
-      label: {
-        text: "Z",
-        font: "14pt sans-serif",
-        fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL,
-        outlineWidth: 2,
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
-        pixelOffset: new Cesium.Cartesian2(-5, 0),
-        eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        show: true,
-      },
-    });
-  }
+  addAxisEntity("ISS_Z_AXIS", new Cesium.Cartesian3(0, 0, axisScale), Cesium.Color.BLUE, "Z");
 };

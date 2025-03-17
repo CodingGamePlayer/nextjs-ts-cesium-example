@@ -3,11 +3,10 @@ import * as Cesium from "cesium";
 
 interface ModelOptionsPanelProps {
   onZoomChange: (value: number) => void;
+  zoomLevel?: number;
 }
 
-const ModelOptionsPanel: React.FC<ModelOptionsPanelProps> = ({ onZoomChange }) => {
-  const [zoom, setZoom] = React.useState<number>(1000000);
-
+const ModelOptionsPanel: React.FC<ModelOptionsPanelProps> = ({ onZoomChange, zoomLevel = 3000000 }) => {
   // 컨테이너 스타일 - MultiViewController 위에 배치하도록 수정
   const containerStyle: React.CSSProperties = {
     position: "absolute",
@@ -68,7 +67,6 @@ const ModelOptionsPanel: React.FC<ModelOptionsPanelProps> = ({ onZoomChange }) =
   // 줌 레벨 변경 핸들러
   const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
-    setZoom(value);
     onZoomChange(value);
   };
 
@@ -89,9 +87,9 @@ const ModelOptionsPanel: React.FC<ModelOptionsPanelProps> = ({ onZoomChange }) =
       <div style={sliderContainerStyle}>
         <div style={labelStyle}>
           <span>줌 레벨:</span>
-          <span style={zoomValueStyle}>{formatZoomValue(zoom)}</span>
+          <span style={zoomValueStyle}>{formatZoomValue(zoomLevel)}</span>
         </div>
-        <input type="range" min="10000" max="2000000" step="10000" value={zoom} onChange={handleZoomChange} style={sliderStyle} />
+        <input type="range" min="10000" max="5000000" step="10000" value={zoomLevel} onChange={handleZoomChange} style={sliderStyle} />
       </div>
     </div>
   );

@@ -1,15 +1,13 @@
 "use client";
 
 import "cesium/Build/Cesium/Widgets/widgets.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // 타입 임포트
 import { CesiumComponentProps, ModelViewMode, RotationState } from "./types/CesiumTypes";
 
 // 유틸리티 함수 임포트
-import { flyToISS } from "./utils/CesiumUtils";
 import { drawISSOrbit } from "./utils/ISSUtils";
-import { highlightModel, setWireframeMode, toggleBoundingBox } from "./utils/ModelViewUtils";
 
 // 컨트롤 컴포넌트 임포트
 import ModelOptionsPanel from "./controls/ModelOptionsPanel";
@@ -30,25 +28,19 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
   // Cesium 초기화 훅 사용
   const { viewerRefs, isLoaded, initializeCesiumJs } = useCesium();
   const { cesiumViewer, cesiumContainerRef, issEntityRef } = viewerRefs;
-  const initialFlyToCompleted = useRef<boolean>(false);
 
   // 회전 상태 관리를 여기서 함
   const [rotation, setRotation] = useState<RotationState>({ yaw: 0, pitch: 0, roll: 0 });
 
   // 수정된 회전 관련 훅 사용
-  const { handleYawChange, handlePitchChange, handleRollChange, handleRotationReset } = useRotation(cesiumViewer, rotation, setRotation);
+  const { handleYawChange, handlePitchChange, handleRollChange } = useRotation(cesiumViewer, rotation, setRotation);
 
   // 상태 관리 - 변경되는 상태만 useState로 유지
   const [animating, setAnimating] = useState(true);
   const [animationSpeed, setAnimationSpeed] = useState(1);
   const [currentViewMode, setCurrentViewMode] = useState<ModelViewMode>("default");
-  const [zoomLevel, setZoomLevel] = useState<number>(1000000);
+  const [zoomLevel, setZoomLevel] = useState<number>(3000000);
   const [trackingEnabled, setTrackingEnabled] = useState<boolean>(true);
-
-  // 변경되지 않는 설정값은 상수로 정의
-  const showWireframe = false;
-  const showBoundingBox = false;
-  const showHighlight = false;
 
   // 카메라 뷰 관련 훅 사용
   const { handleViewModeChange, updateCameraPosition, handleZoomChange } = useCameraView(
@@ -75,31 +67,14 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
       if (result && result.issEntity) {
         issEntityRef.current = result.issEntity;
 
-        // 초기 이동이 아직 완료되지 않은 경우에만 ISS로 카메라 이동
-        if (!initialFlyToCompleted.current) {
-          setTimeout(() => {
-            flyToISS(cesiumViewer.current, true); // 추적 활성화
-            initialFlyToCompleted.current = true; // 초기 이동 완료 표시
-          }, 1000); // 1초 지연 후 실행하여 엔티티가 완전히 로드되도록 함
+        if (cesiumViewer.current) {
+          // 타입 안전성 보장 - null 체크 추가
+          // 초기 카메라 이동 완료 후 기본 뷰(등각뷰)로 자동 설정
+          handleViewModeChange("default");
         }
       }
     }
-  }, [isLoaded, issPositions, rotation, animationSpeed, cesiumViewer, issEntityRef]);
-
-  // 애니메이션 속도 변경 시 시계 업데이트
-  useEffect(() => {
-    if (cesiumViewer.current) {
-      cesiumViewer.current.clock.multiplier = animationSpeed;
-    }
-  }, [animationSpeed, cesiumViewer]);
-
-  // animating 상태 변경 시 시계 설정 업데이트
-  useEffect(() => {
-    if (cesiumViewer.current) {
-      cesiumViewer.current.clock.shouldAnimate = animating;
-      cesiumViewer.current.scene.requestRender();
-    }
-  }, [animating, cesiumViewer]);
+  }, [isLoaded, issPositions, rotation, animationSpeed, cesiumViewer, issEntityRef, trackingEnabled, zoomLevel, handleViewModeChange]);
 
   // 뷰 모드 변경 시 효과
   useEffect(() => {
@@ -109,25 +84,9 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
     }
   }, [isLoaded, currentViewMode, handleViewModeChange, cesiumViewer]);
 
-  // 와이어프레임, 바운딩 박스, 하이라이트 설정 변경 시 효과
-  useEffect(() => {
-    if (isLoaded && issEntityRef.current) {
-      // 설정 적용
-      setWireframeMode(cesiumViewer.current, showWireframe);
-      toggleBoundingBox(cesiumViewer.current, issEntityRef.current.id, showBoundingBox);
-      highlightModel(cesiumViewer.current, issEntityRef.current.id, showHighlight);
-    }
-  }, [isLoaded, showWireframe, showBoundingBox, showHighlight, cesiumViewer, issEntityRef]);
-
   // Clock 상태 변경 관련 이펙트
   useEffect(() => {
     if (cesiumViewer.current) {
-      // 애니메이션 속도 설정
-      cesiumViewer.current.clock.multiplier = animationSpeed;
-
-      // 애니메이션 상태 설정
-      cesiumViewer.current.clock.shouldAnimate = animating;
-
       // 카메라 추적이 활성화된 경우 카메라 위치 업데이트
       if (trackingEnabled && issEntityRef.current) {
         updateCameraPosition();
@@ -137,18 +96,11 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
     }
   }, [animationSpeed, animating, trackingEnabled, updateCameraPosition, cesiumViewer, issEntityRef]);
 
-  // 추적 모드 변경 감지 및 적용
-  useEffect(() => {
-    if (cesiumViewer.current && issEntityRef.current) {
-      if (trackingEnabled) {
-        // 추적 모드 활성화 시 현재 뷰 모드에 맞게 카메라 업데이트
-        handleViewModeChange(currentViewMode);
-      } else {
-        // 추적 모드 비활성화 시 추적 엔티티 해제
-        cesiumViewer.current.trackedEntity = undefined;
-      }
-    }
-  }, [trackingEnabled, currentViewMode, handleViewModeChange, cesiumViewer, issEntityRef]);
+  // 회전 초기화 함수 수정
+  const handleRotationReset = useCallback(() => {
+    // 회전 상태 초기화
+    setRotation({ yaw: 0, pitch: 0, roll: 0 });
+  }, []);
 
   // 이제 조건부 반환 수행
   if (!CesiumJs) return null;
@@ -165,7 +117,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
         onReset={handleRotationReset}
       />
 
-      <ModelOptionsPanel onZoomChange={handleZoomChange} />
+      <ModelOptionsPanel onZoomChange={handleZoomChange} zoomLevel={zoomLevel} />
 
       <MultiViewController currentView={currentViewMode} onViewChange={handleViewModeChange} />
 

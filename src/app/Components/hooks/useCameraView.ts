@@ -143,8 +143,10 @@ export function useCameraView(
               // 하단 뷰에서만 더 가까운 줌 레벨 적용
               currentZoomLevel = zoomLevel * 0.7;
               break;
+            // 기본 뷰 (default)를 등각뷰로 사용
             case "default":
             default:
+              // 등각뷰 (isometric view) 설정
               headingRadians = Cesium.Math.toRadians(45);
               pitchRadians = Cesium.Math.toRadians(-30);
               break;
