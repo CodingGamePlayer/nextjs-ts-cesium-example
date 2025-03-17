@@ -145,14 +145,6 @@ export function useCameraView(
                 toSunDirection = new Cesium.Cartesian3();
                 Cesium.Cartesian3.subtract(sunPositionInECEF, issPosition, toSunDirection);
                 Cesium.Cartesian3.normalize(toSunDirection, toSunDirection);
-
-                // 디버깅 정보 (문제 해결에 도움이 됨)
-                console.log("태양 방향 계산 완료:", {
-                  mode,
-                  heading: Cesium.Math.toDegrees(headingRadians),
-                  pitch: Cesium.Math.toDegrees(pitchRadians),
-                  sunDirection: toSunDirection,
-                });
               }
             } catch (error) {
               console.error("태양 위치 계산 오류:", error);

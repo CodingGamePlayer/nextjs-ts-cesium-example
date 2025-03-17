@@ -15,6 +15,7 @@ import ModelOptionsPanel from "./controls/ModelOptionsPanel";
 import MultiViewController from "./controls/MultiViewController";
 import RotationControl from "./controls/RotationControl";
 import AnimationController from "./controls/AnimationController";
+import GroundStationPanel from "./controls/GroundStationPanel";
 
 // Cesium 초기화 훅 임포트
 import { useCesium } from "./hooks/useCesium";
@@ -25,6 +26,7 @@ import LoadingScreen from "./common/LoadingScreen";
 // 모델 회전 관련 훅 임포트
 import { useCameraView } from "./hooks/useCameraView";
 import { useRotation } from "./hooks/useRotation";
+import { useGroundStations } from "./hooks/useGroundStations";
 
 export const CesiumComponent = ({ CesiumJs, positions, issPositions: initialIssPositions, tleLine1, tleLine2 }: CesiumComponentProps) => {
   // Cesium 초기화 훅 사용
@@ -176,6 +178,10 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions: initialIssP
     [cesiumViewer]
   );
 
+  // 지상국 관련 훅 추가
+  const { groundStations, stationVisibility, selectedStation, toggleStationVisibility, flyToGroundStation, setSelectedStation } =
+    useGroundStations(cesiumViewer);
+
   // 이제 조건부 반환 수행
   if (!CesiumJs) return null;
 
@@ -198,6 +204,14 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions: initialIssP
       <AnimationController animating={animating} animationSpeed={animationSpeed} onAnimatingChange={handleAnimatingChange} onSpeedChange={handleSpeedChange} />
 
       <div ref={cesiumContainerRef} id="cesium-container" style={{ height: "100vh", width: "100vw" }} />
+
+      <GroundStationPanel
+        groundStations={groundStations}
+        stationVisibility={stationVisibility}
+        selectedStation={selectedStation}
+        toggleStationVisibility={toggleStationVisibility}
+        flyToGroundStation={flyToGroundStation}
+      />
     </>
   );
 };
