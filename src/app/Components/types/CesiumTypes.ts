@@ -27,9 +27,11 @@ export interface GroundStation {
 
 // CesiumComponent 속성 타입 정의
 export interface CesiumComponentProps {
-  CesiumJs?: CesiumType;
-  positions: Position[];
-  issPositions?: SatellitePosition[];
+  CesiumJs: any;
+  positions: any[];
+  issPositions: any[];
+  tleLine1?: string; // TLE 데이터 첫 번째 줄
+  tleLine2?: string; // TLE 데이터 두 번째 줄
   groundStations?: GroundStation[];
 }
 

@@ -75,7 +75,7 @@ const ModelOptionsPanel: React.FC<ModelOptionsPanelProps> = ({ onZoomChange, zoo
           <span>줌 레벨:</span>
           <span style={zoomValueStyle}>{formatZoomValue(zoomLevel)}</span>
         </div>
-        <input type="range" min="10000" max="5000000" step="10000" value={zoomLevel} onChange={handleZoomChange} style={sliderStyle} />
+        <input type="range" min="10000" max="100000000" step="10000" value={zoomLevel} onChange={handleZoomChange} style={sliderStyle} />
       </div>
     </div>
   );
