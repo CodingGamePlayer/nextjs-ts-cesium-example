@@ -1,5 +1,4 @@
 import React from "react";
-import * as Cesium from "cesium";
 
 interface ModelOptionsPanelProps {
   onZoomChange: (value: number) => void;
@@ -24,17 +23,6 @@ const ModelOptionsPanel: React.FC<ModelOptionsPanelProps> = ({ onZoomChange, zoo
     width: "300px",
     boxShadow: "0 4px 8px rgba(0, 0, 0, 0.3)",
     marginBottom: "15px", // MultiViewController와 간격 추가
-  };
-
-  // 제목 스타일
-  const titleStyle: React.CSSProperties = {
-    margin: 0,
-    marginBottom: "10px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    textAlign: "center",
-    borderBottom: "1px solid rgba(255, 255, 255, 0.3)",
-    paddingBottom: "8px",
   };
 
   // 라벨 스타일
@@ -82,8 +70,6 @@ const ModelOptionsPanel: React.FC<ModelOptionsPanelProps> = ({ onZoomChange, zoo
 
   return (
     <div style={containerStyle}>
-      <h3 style={titleStyle}>모델 옵션</h3>
-
       <div style={sliderContainerStyle}>
         <div style={labelStyle}>
           <span>줌 레벨:</span>

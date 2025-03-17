@@ -51,7 +51,8 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
     zoomLevel,
     setZoomLevel,
     trackingEnabled,
-    setTrackingEnabled
+    setTrackingEnabled,
+    rotation
   );
 
   // 초기 Cesium 초기화

@@ -2,7 +2,7 @@
 
 import * as Cesium from "cesium";
 import { useCallback } from "react";
-import { ModelViewConfig, ModelViewMode } from "../types/CesiumTypes";
+import { ModelViewConfig, ModelViewMode, RotationState } from "../types/CesiumTypes";
 import { applyModelView } from "../utils/ModelViewUtils";
 
 /**
@@ -16,7 +16,8 @@ export function useCameraView(
   zoomLevel: number,
   setZoomLevel: React.Dispatch<React.SetStateAction<number>>,
   trackingEnabled: boolean,
-  setTrackingEnabled: React.Dispatch<React.SetStateAction<boolean>>
+  setTrackingEnabled: React.Dispatch<React.SetStateAction<boolean>>,
+  rotation: RotationState
 ) {
   // 뷰 모드별 설정 적용
   const configureViewSettings = useCallback(
@@ -115,6 +116,7 @@ export function useCameraView(
           // 뷰 모드에 따른 줌 레벨 설정 (하단 뷰만 더 가깝게)
           let currentZoomLevel = zoomLevel;
 
+          // 기본 방향 설정 (rotation 고려 전)
           switch (mode) {
             case "front":
               headingRadians = Cesium.Math.toRadians(270);
@@ -137,19 +139,25 @@ export function useCameraView(
               pitchRadians = Cesium.Math.toRadians(-90);
               break;
             case "bottom":
-              // 하단 뷰 각도 조정
               headingRadians = Cesium.Math.toRadians(0);
               pitchRadians = Cesium.Math.toRadians(90);
-              // 하단 뷰에서만 더 가까운 줌 레벨 적용
               currentZoomLevel = zoomLevel * 0.7;
               break;
-            // 기본 뷰 (default)를 등각뷰로 사용
             case "default":
             default:
-              // 등각뷰 (isometric view) 설정
               headingRadians = Cesium.Math.toRadians(45);
               pitchRadians = Cesium.Math.toRadians(-30);
               break;
+          }
+
+          // 모델 회전 상태를 카메라 방향에 적용
+          // yaw(y축), pitch(x축), roll(z축) 회전을 카메라 heading과 pitch에 반영
+          if (mode !== "top" && mode !== "bottom") {
+            // yaw 조정 (수평 회전) - 기존 heading에 yaw 회전 추가
+            headingRadians += Cesium.Math.toRadians(rotation.yaw);
+
+            // pitch 조정 (수직 회전) - 기존 pitch에 pitch 회전 적용
+            pitchRadians += Cesium.Math.toRadians(rotation.pitch);
           }
 
           // 추적 활성화
@@ -190,7 +198,7 @@ export function useCameraView(
         applyModelView(cesiumViewer.current, viewConfig);
       }
     },
-    [zoomLevel, trackingEnabled, issEntityRef, cesiumViewer, configureViewSettings, setCurrentViewMode, setTrackingEnabled]
+    [zoomLevel, trackingEnabled, issEntityRef, cesiumViewer, configureViewSettings, setCurrentViewMode, setTrackingEnabled, rotation]
   );
 
   // 카메라 위치 업데이트 함수

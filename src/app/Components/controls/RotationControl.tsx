@@ -13,7 +13,7 @@ interface RotationControlProps {
 const RotationControl: React.FC<RotationControlProps> = ({ rotation, onYawChange, onPitchChange, onRollChange, onReset }) => {
   return (
     <div style={rotationControlStyle}>
-      <div style={{ textAlign: "center", marginBottom: "5px", fontWeight: "bold" }}>ISS 회전 컨트롤</div>
+      <div style={{ textAlign: "center", marginBottom: "5px", fontWeight: "bold" }}>모델 회전 컨트롤러</div>
 
       {/* Yaw 컨트롤 */}
       <div style={rotationRowStyle}>
