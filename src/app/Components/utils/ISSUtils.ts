@@ -5,6 +5,7 @@ import { RotationState } from "../types/CesiumTypes";
 
 // ISS 궤도 그리기 함수
 export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: SatellitePosition[] | undefined, rotation: RotationState, animationSpeed: number) => {
+  console.log("🚀 ~ drawISSOrbit ~ issPositions:", issPositions);
   try {
     if (!cesiumViewer || !issPositions?.length) return;
 
@@ -32,6 +33,7 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
       }
     });
 
+    // 궤도 위치 계산 (시간당 정확한 위치 매핑)
     const orbitPositions = issPositions.map((pos) => Cesium.Cartesian3.fromDegrees(pos.longitude, pos.latitude, pos.height));
 
     // ISS 궤도 추가 (존재 여부 확인 후)
@@ -45,6 +47,8 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
             glowPower: 0.2,
             color: Cesium.Color.BLUE,
           }),
+          // 고도를 정확하게 추적하기 위한 설정 추가
+          clampToGround: false,
         },
       });
     }
@@ -59,48 +63,50 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
       // 부드러운 이동을 위한 SampledPositionProperty 생성
       const issPositionProperty = new Cesium.SampledPositionProperty();
 
-      // 시작 위치 설정
-      const startTime = Cesium.JulianDate.fromDate(new Date());
-      issPositionProperty.addSample(startTime, orbitPositions[0]);
-
-      // 모든 위치를 샘플로 추가 (시간 간격 계산)
-      const orbitDurationSeconds = 5400; // 궤도 주기 90분
-      const timeStepSeconds = orbitDurationSeconds / orbitPositions.length;
-
-      // 궤도 전체에 샘플 추가
-      for (let i = 0; i < orbitPositions.length; i++) {
-        const sampleTime = Cesium.JulianDate.addSeconds(startTime, i * timeStepSeconds, new Cesium.JulianDate());
-        issPositionProperty.addSample(sampleTime, orbitPositions[i]);
-      }
-
-      // 마지막 지점 추가 (한 바퀴 더)
-      const endTime = Cesium.JulianDate.addSeconds(startTime, orbitDurationSeconds, new Cesium.JulianDate());
-      issPositionProperty.addSample(endTime, orbitPositions[0]);
-
-      // 보간 설정 (현재 시간에 맞게 위치 계산)
+      // 정확한 보간을 위한 옵션 설정
       issPositionProperty.setInterpolationOptions({
         interpolationDegree: 3,
         interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
       });
 
-      // 시계 설정 저장 (회전 시 초기화 방지)
+      // 현재 시간과 가장 가까운 위치 찾기
+      const now = new Date();
+      let closestPositionIndex = 0;
+      let minTimeDiff = Number.MAX_VALUE;
+
+      for (let i = 0; i < issPositions.length; i++) {
+        const timeDiff = Math.abs(issPositions[i].epoch.getTime() - now.getTime());
+        if (timeDiff < minTimeDiff) {
+          minTimeDiff = timeDiff;
+          closestPositionIndex = i;
+        }
+      }
+
+      // 시작 시간 설정
+      const startTime = Cesium.JulianDate.fromDate(issPositions[0].epoch);
+      const endTime = Cesium.JulianDate.fromDate(issPositions[issPositions.length - 1].epoch);
+
+      // 현재 시간에 가장 가까운 시간 찾기
+      const currentPositionTime = Cesium.JulianDate.fromDate(issPositions[closestPositionIndex].epoch);
+
+      // 시간 간격 계산 - 각 위치의 실제 시간 사용
+      for (let i = 0; i < issPositions.length; i++) {
+        const sampleTime = Cesium.JulianDate.fromDate(issPositions[i].epoch);
+        issPositionProperty.addSample(sampleTime, orbitPositions[i]);
+      }
+
+      // 시계 설정 저장
       const clockSettings = {
-        startTime, // 타입 오류를 방지하기 위해 간단한 할당 사용
+        startTime,
         stopTime: endTime,
-        currentTime: startTime,
+        currentTime: currentPositionTime, // 현재 시간에 가장 가까운 위치의 시간으로 설정
         multiplier: animationSpeed,
       };
 
-      // 시계 설정 업데이트 (null 체크 추가)
-      if (clockSettings.startTime) {
-        cesiumViewer.clock.startTime = clockSettings.startTime;
-      }
-      if (clockSettings.stopTime) {
-        cesiumViewer.clock.stopTime = clockSettings.stopTime;
-      }
-      if (clockSettings.currentTime) {
-        cesiumViewer.clock.currentTime = clockSettings.currentTime;
-      }
+      // 시계 설정 적용
+      cesiumViewer.clock.startTime = clockSettings.startTime;
+      cesiumViewer.clock.stopTime = clockSettings.stopTime;
+      cesiumViewer.clock.currentTime = clockSettings.currentTime;
       cesiumViewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
       cesiumViewer.clock.multiplier = clockSettings.multiplier;
 
@@ -145,7 +151,7 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
           maximumScale: 20000,
           scale: satelliteScale,
           runAnimations: false, // 애니메이션 비활성화
-          heightReference: Cesium.HeightReference.NONE,
+          heightReference: Cesium.HeightReference.NONE, // 높이 참조 명시적 설정
           color: Cesium.Color.WHITE,
           silhouetteColor: Cesium.Color.WHITE,
           silhouetteSize: 2.0,
