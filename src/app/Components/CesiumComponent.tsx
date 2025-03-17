@@ -277,14 +277,14 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
         }
       }
     }
-  }, [isLoaded, issPositions, rotation, animationSpeed]);
+  }, [isLoaded, issPositions, rotation, animationSpeed, cesiumViewer, issEntityRef]);
 
   // 애니메이션 속도 변경 시 시계 업데이트
   React.useEffect(() => {
     if (cesiumViewer.current) {
       cesiumViewer.current.clock.multiplier = animationSpeed;
     }
-  }, [animationSpeed]);
+  }, [animationSpeed, cesiumViewer]);
 
   // animating 상태 변경 시 시계 설정 업데이트
   React.useEffect(() => {
@@ -292,7 +292,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
       cesiumViewer.current.clock.shouldAnimate = animating;
       cesiumViewer.current.scene.requestRender();
     }
-  }, [animating]);
+  }, [animating, cesiumViewer]);
 
   // 뷰 모드 변경 시 효과
   React.useEffect(() => {
@@ -300,7 +300,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
       // 모드가 변경되면 해당 뷰를 적용
       handleViewModeChange(currentViewMode);
     }
-  }, [isLoaded, currentViewMode, handleViewModeChange]);
+  }, [isLoaded, currentViewMode, handleViewModeChange, cesiumViewer]);
 
   // 와이어프레임, 바운딩 박스, 하이라이트 설정 변경 시 효과
   React.useEffect(() => {
@@ -310,7 +310,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
       toggleBoundingBox(cesiumViewer.current, issEntityRef.current.id, showBoundingBox);
       highlightModel(cesiumViewer.current, issEntityRef.current.id, showHighlight);
     }
-  }, [isLoaded, showWireframe, showBoundingBox, showHighlight]);
+  }, [isLoaded, showWireframe, showBoundingBox, showHighlight, cesiumViewer, issEntityRef]);
 
   // Clock 상태 변경 관련 이펙트
   React.useEffect(() => {
@@ -328,7 +328,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
 
       cesiumViewer.current.scene.requestRender();
     }
-  }, [animationSpeed, animating, trackingEnabled, updateCameraPosition]);
+  }, [animationSpeed, animating, trackingEnabled, updateCameraPosition, cesiumViewer, issEntityRef]);
 
   // 추적 모드 변경 감지 및 적용
   React.useEffect(() => {
@@ -341,7 +341,7 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
         cesiumViewer.current.trackedEntity = undefined;
       }
     }
-  }, [trackingEnabled, currentViewMode, handleViewModeChange]);
+  }, [trackingEnabled, currentViewMode, handleViewModeChange, cesiumViewer, issEntityRef]);
 
   // 이제 조건부 반환 수행
   if (!CesiumJs) return null;
