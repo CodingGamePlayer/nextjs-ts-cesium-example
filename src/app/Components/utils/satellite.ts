@@ -1,12 +1,6 @@
 import * as satellite from "satellite.js";
 import { EciVec3 } from "satellite.js";
-
-export interface SatellitePosition {
-  longitude: number;
-  latitude: number;
-  height: number;
-  epoch: Date;
-}
+import { SatellitePosition } from "../types/CesiumTypes";
 
 /**
  * TLE 데이터로부터 위성 궤도를 계산합니다.

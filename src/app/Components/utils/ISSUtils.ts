@@ -1,15 +1,12 @@
 import * as Cesium from "cesium";
 import { Viewer } from "cesium";
-import { SatellitePosition } from "../../utils/satellite";
-import { RotationState } from "../types/CesiumTypes";
+import { RotationState, SatellitePosition } from "../types/CesiumTypes";
 
 // ISS 궤도 그리기 함수
 export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: SatellitePosition[] | undefined, rotation: RotationState, animationSpeed: number) => {
-  console.log("🚀 ~ drawISSOrbit ~ issPositions:", issPositions);
   try {
     if (!cesiumViewer || !issPositions?.length) return;
 
-    // 모든 ISS 관련 엔티티 제거 - 더 강력한 방식으로 구현
     const entitiesToRemove = ["ISS", "ISS_ORBIT", "ISS_X_AXIS", "ISS_Y_AXIS", "ISS_Z_AXIS"];
 
     // 1. ID로 명시적 제거 시도
@@ -124,9 +121,6 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
 
         if (!futurePosition) return Cesium.Quaternion.IDENTITY;
 
-        // 진행 방향과 위 방향으로 회전 계산
-        const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(currentPosition);
-
         // 기본 회전 계산
         const baseRotation = Cesium.Transforms.headingPitchRollQuaternion(currentPosition, new Cesium.HeadingPitchRoll(0, 0, 0));
 
@@ -150,20 +144,12 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
           minimumPixelSize: 128,
           maximumScale: 20000,
           scale: satelliteScale,
-          runAnimations: false, // 애니메이션 비활성화
+          runAnimations: true, // 애니메이션 비활성화
           heightReference: Cesium.HeightReference.NONE, // 높이 참조 명시적 설정
           color: Cesium.Color.WHITE,
           silhouetteColor: Cesium.Color.WHITE,
           silhouetteSize: 2.0,
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 20000000),
-        },
-        label: {
-          text: "ISS",
-          font: "14pt sans-serif",
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          outlineWidth: 2,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          pixelOffset: new Cesium.Cartesian2(0, -9),
         },
       });
 
@@ -238,17 +224,20 @@ const addISSAxes = (cesiumViewer: Viewer, issEntity: Cesium.Entity, orbitPositio
         const xAxis = new Cesium.Cartesian3(axisScale, 0, 0);
         const rotatedXAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, xAxis, new Cesium.Cartesian3());
 
-        return Cesium.Cartesian3.midpoint(issPosition, rotatedXAxis, new Cesium.Cartesian3());
+        // 중간점(midpoint) 대신 선의 끝점을 반환하도록 수정
+        return rotatedXAxis;
       }, false) as any,
       label: {
         text: "X",
         font: "14pt sans-serif",
         fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        style: Cesium.LabelStyle.FILL,
         outlineWidth: 2,
+        // 정렬 설정 수정 - 수평 정렬을 왼쪽으로 설정
         verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-        pixelOffset: new Cesium.Cartesian2(0, 0),
+        horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+        // 약간의 오프셋 추가
+        pixelOffset: new Cesium.Cartesian2(-5, 0),
         eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         show: true,
@@ -293,17 +282,18 @@ const addISSAxes = (cesiumViewer: Viewer, issEntity: Cesium.Entity, orbitPositio
         const yAxis = new Cesium.Cartesian3(0, axisScale, 0);
         const rotatedYAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, yAxis, new Cesium.Cartesian3());
 
-        return Cesium.Cartesian3.midpoint(issPosition, rotatedYAxis, new Cesium.Cartesian3());
+        // 중간점 대신 끝점 반환
+        return rotatedYAxis;
       }, false) as any,
       label: {
         text: "Y",
         font: "14pt sans-serif",
         fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        style: Cesium.LabelStyle.FILL,
         outlineWidth: 2,
         verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-        pixelOffset: new Cesium.Cartesian2(0, 0),
+        horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+        pixelOffset: new Cesium.Cartesian2(-5, 0),
         eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         show: true,
@@ -348,17 +338,18 @@ const addISSAxes = (cesiumViewer: Viewer, issEntity: Cesium.Entity, orbitPositio
         const zAxis = new Cesium.Cartesian3(0, 0, axisScale);
         const rotatedZAxis = Cesium.Matrix4.multiplyByPoint(modelMatrix, zAxis, new Cesium.Cartesian3());
 
-        return Cesium.Cartesian3.midpoint(issPosition, rotatedZAxis, new Cesium.Cartesian3());
+        // 중간점 대신 끝점 반환
+        return rotatedZAxis;
       }, false) as any,
       label: {
         text: "Z",
         font: "14pt sans-serif",
         fillColor: Cesium.Color.YELLOW,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        style: Cesium.LabelStyle.FILL,
         outlineWidth: 2,
         verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-        pixelOffset: new Cesium.Cartesian2(0, 0),
+        horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+        pixelOffset: new Cesium.Cartesian2(-5, 0),
         eyeOffset: new Cesium.Cartesian3(0, 0, -10000),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         show: true,

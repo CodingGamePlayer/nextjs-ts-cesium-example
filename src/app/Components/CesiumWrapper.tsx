@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { CesiumType } from "../types/cesium";
+import type { CesiumType } from "./types/CesiumTypes";
 
 interface CesiumWrapperProps {
   children: React.ReactElement<{ CesiumJs: CesiumType }>;

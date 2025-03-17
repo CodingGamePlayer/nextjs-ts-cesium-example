@@ -1,6 +1,12 @@
-import type { SatellitePosition } from "../../utils/satellite";
-import type { Cesium3DTileset, Entity, Viewer, JulianDate } from "cesium";
+import type { Entity, JulianDate, Viewer } from "cesium";
 import * as Cesium from "cesium";
+
+export interface SatellitePosition {
+  longitude: number;
+  latitude: number;
+  height: number;
+  epoch: Date;
+}
 
 export type Position = {
   lat: number;

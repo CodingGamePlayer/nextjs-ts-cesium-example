@@ -4,7 +4,6 @@ import * as Cesium from "cesium";
 import { Entity, Viewer } from "cesium";
 import { useCallback, useRef, useState } from "react";
 import { ViewerRefs } from "../types/CesiumTypes";
-import { resetCamera } from "../utils/CesiumUtils";
 
 export function useCesium() {
   // 뷰어 관련 참조
@@ -60,11 +59,6 @@ export function useCesium() {
         if (animating) {
           cesiumViewer.current?.scene.requestRender();
         }
-      });
-
-      // 모드 변경 시 카메라 재설정
-      cesiumViewer.current.scene.morphComplete.addEventListener(() => {
-        resetCamera(cesiumViewer.current);
       });
 
       cesiumViewer.current.scene.globe.enableLighting = true;

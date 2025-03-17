@@ -1,16 +1,15 @@
 "use client";
 
-import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // 타입 임포트
-import { CesiumComponentProps, ModelViewConfig, ModelViewMode, RotationState } from "./types/CesiumTypes";
+import { CesiumComponentProps, ModelViewMode, RotationState } from "./types/CesiumTypes";
 
 // 유틸리티 함수 임포트
 import { flyToISS } from "./utils/CesiumUtils";
 import { drawISSOrbit } from "./utils/ISSUtils";
-import { applyModelView, highlightModel, setWireframeMode, toggleBoundingBox } from "./utils/ModelViewUtils";
+import { highlightModel, setWireframeMode, toggleBoundingBox } from "./utils/ModelViewUtils";
 
 // 컨트롤 컴포넌트 임포트
 import ModelOptionsPanel from "./controls/ModelOptionsPanel";
@@ -24,8 +23,8 @@ import { useCesium } from "./hooks/useCesium";
 import LoadingScreen from "./common/LoadingScreen";
 
 // 모델 회전 관련 훅 임포트
-import { useRotation } from "./hooks/useRotation";
 import { useCameraView } from "./hooks/useCameraView";
+import { useRotation } from "./hooks/useRotation";
 
 export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumComponentProps) => {
   // Cesium 초기화 훅 사용
@@ -39,15 +38,17 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
   // 수정된 회전 관련 훅 사용
   const { handleYawChange, handlePitchChange, handleRollChange, handleRotationReset } = useRotation(cesiumViewer, rotation, setRotation);
 
-  // 상태 관리 (회전 상태 제거)
+  // 상태 관리 - 변경되는 상태만 useState로 유지
   const [animating, setAnimating] = useState(true);
   const [animationSpeed, setAnimationSpeed] = useState(1);
   const [currentViewMode, setCurrentViewMode] = useState<ModelViewMode>("default");
   const [zoomLevel, setZoomLevel] = useState<number>(1000000);
-  const [showWireframe, setShowWireframe] = useState<boolean>(false);
-  const [showBoundingBox, setShowBoundingBox] = useState<boolean>(false);
-  const [showHighlight, setShowHighlight] = useState<boolean>(false);
   const [trackingEnabled, setTrackingEnabled] = useState<boolean>(true);
+
+  // 변경되지 않는 설정값은 상수로 정의
+  const showWireframe = false;
+  const showBoundingBox = false;
+  const showHighlight = false;
 
   // 카메라 뷰 관련 훅 사용
   const { handleViewModeChange, updateCameraPosition, handleZoomChange } = useCameraView(
@@ -61,12 +62,13 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
     setTrackingEnabled
   );
 
-  // 기존 useEffect 대체
+  // 초기 Cesium 초기화
   useEffect(() => {
     if (isLoaded) return;
     initializeCesiumJs(positions, animationSpeed, animating);
   }, [positions, isLoaded, animationSpeed, animating, initializeCesiumJs]);
 
+  // ISS 궤도 및 모델 그리기, 카메라이동
   useEffect(() => {
     if (isLoaded && issPositions?.length) {
       const result = drawISSOrbit(cesiumViewer.current, issPositions, rotation, animationSpeed);

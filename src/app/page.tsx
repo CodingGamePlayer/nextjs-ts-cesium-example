@@ -2,7 +2,7 @@
 
 import CesiumComponent from "./Components/CesiumComponent";
 import CesiumWrapper from "./Components/CesiumWrapper";
-import { calculateSatelliteOrbit } from "./utils/satellite";
+import { calculateSatelliteOrbit } from "./Components/utils/satellite";
 import type { Position } from "./Components/types/CesiumTypes";
 
 // ISS의 TLE 데이터 (실제 사용시에는 최신 데이터로 업데이트 필요)
