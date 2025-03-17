@@ -19,8 +19,6 @@ import MultiViewController from "./controls/MultiViewController";
 import RotationControl from "./controls/RotationControl";
 
 export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumComponentProps) => {
-  if (!CesiumJs) return null;
-
   // 일반 상수 (useState 대신 직접 선언)
   const SHOW_TRAJECTORY = false;
 
@@ -641,6 +639,9 @@ export const CesiumComponent = ({ CesiumJs, positions, issPositions }: CesiumCom
       }
     }
   }, [trackingEnabled, currentViewMode, handleViewModeChange]);
+
+  // 이제 조건부 반환 수행
+  if (!CesiumJs) return null;
 
   return (
     <>

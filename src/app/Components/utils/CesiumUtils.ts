@@ -1,5 +1,5 @@
 import * as Cesium from "cesium";
-import { Cesium3DTileset, Viewer } from "cesium";
+import { Viewer } from "cesium";
 import { ViewerRefs } from "../types/CesiumTypes";
 
 // 카메라 초기화 함수

@@ -1,8 +1,13 @@
-import type { CesiumType } from "../../types/cesium";
-import type { Position } from "../../types/position";
 import type { SatellitePosition } from "../../utils/satellite";
 import type { Cesium3DTileset, Entity, Viewer, JulianDate } from "cesium";
 import * as Cesium from "cesium";
+
+export type Position = {
+  lat: number;
+  lng: number;
+};
+
+export type CesiumType = typeof import("cesium");
 
 // 지상국 타입 정의
 export interface GroundStation {
