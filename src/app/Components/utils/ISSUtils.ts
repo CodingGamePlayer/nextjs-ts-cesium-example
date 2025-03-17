@@ -49,6 +49,9 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
       });
     }
 
+    // 이 곳에 'issEntity'를 선언하여 결과를 저장
+    let issEntity = null;
+
     // ISS 모델 추가 - 재확인 후 추가
     if (!cesiumViewer.entities.getById("ISS")) {
       const satelliteScale = 1000; // 모델 크기 조정 (필요에 따라 조정)
@@ -101,10 +104,40 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
       cesiumViewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
       cesiumViewer.clock.multiplier = clockSettings.multiplier;
 
-      const issEntity = cesiumViewer.entities.add({
+      // orientation 콜백 함수 수정
+      const orientationCallback = new Cesium.CallbackProperty((time) => {
+        if (!issPositions || issPositions.length < 2) return Cesium.Quaternion.IDENTITY;
+
+        // 현재 위치 가져오기
+        const currentPosition = issPositionProperty.getValue(time);
+        if (!currentPosition) return Cesium.Quaternion.IDENTITY;
+
+        // 약간 미래 시간 계산
+        const futureTime = Cesium.JulianDate.addSeconds(time, 1, new Cesium.JulianDate());
+        const futurePosition = issPositionProperty.getValue(futureTime);
+
+        if (!futurePosition) return Cesium.Quaternion.IDENTITY;
+
+        // 진행 방향과 위 방향으로 회전 계산
+        const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(currentPosition);
+
+        // 기본 회전 계산
+        const baseRotation = Cesium.Transforms.headingPitchRollQuaternion(currentPosition, new Cesium.HeadingPitchRoll(0, 0, 0));
+
+        // 사용자 회전 적용 - 여기서 rotation 참조를 직접 사용하지 않고 전역 변수로 활용
+        const userRotation = Cesium.Quaternion.fromHeadingPitchRoll(
+          new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(rotation.yaw), Cesium.Math.toRadians(rotation.pitch), Cesium.Math.toRadians(rotation.roll))
+        );
+
+        // 회전 결합
+        return Cesium.Quaternion.multiply(baseRotation, userRotation, new Cesium.Quaternion());
+      }, false);
+
+      // 엔티티 생성 시 orientation 속성에 콜백 함수 할당
+      issEntity = cesiumViewer.entities.add({
         id: "ISS",
-        // 부드러운 움직임을 위한 SampledPositionProperty 사용
         position: issPositionProperty,
+        orientation: orientationCallback,
         // 포인트 표시 대신 3D 모델 사용
         model: {
           uri: "/Cesium_Air.glb", // public 디렉토리의 위성 모델 경로
@@ -126,39 +159,6 @@ export const drawISSOrbit = (cesiumViewer: Viewer | null, issPositions: Satellit
           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
           pixelOffset: new Cesium.Cartesian2(0, -9),
         },
-        // 모델 방향 설정 (위성의 진행 방향 기준 + 사용자 회전)
-        orientation: new Cesium.CallbackProperty((time) => {
-          if (!issPositions || issPositions.length < 2) return Cesium.Quaternion.IDENTITY;
-
-          // 현재 위치 가져오기
-          const currentPosition = issPositionProperty.getValue(time);
-          if (!currentPosition) return Cesium.Quaternion.IDENTITY;
-
-          // 약간 미래 시간 계산
-          const futureTime = Cesium.JulianDate.addSeconds(time, 1, new Cesium.JulianDate());
-          const futurePosition = issPositionProperty.getValue(futureTime);
-
-          if (!futurePosition) return Cesium.Quaternion.IDENTITY;
-
-          // 두 위치가 같으면 기본 방향 리턴
-          if (Cesium.Cartesian3.equals(currentPosition, futurePosition)) {
-            return Cesium.Quaternion.IDENTITY;
-          }
-
-          // 진행 방향과 위 방향으로 회전 계산
-          const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(currentPosition);
-
-          // 기본 회전 계산
-          const baseRotation = Cesium.Transforms.headingPitchRollQuaternion(currentPosition, new Cesium.HeadingPitchRoll(0, 0, 0));
-
-          // 사용자 회전 적용
-          const userRotation = Cesium.Quaternion.fromHeadingPitchRoll(
-            new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(rotation.yaw), Cesium.Math.toRadians(rotation.pitch), Cesium.Math.toRadians(rotation.roll))
-          );
-
-          // 회전 결합
-          return Cesium.Quaternion.multiply(baseRotation, userRotation, new Cesium.Quaternion());
-        }, false),
       });
 
       // ISS 기준 XYZ 축 추가

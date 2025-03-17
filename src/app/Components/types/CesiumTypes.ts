@@ -46,7 +46,6 @@ export interface ClockSettings {
 export interface ViewerRefs {
   cesiumViewer: React.MutableRefObject<Viewer | null>;
   cesiumContainerRef: React.MutableRefObject<HTMLDivElement | null>;
-  addedScenePrimitives: React.MutableRefObject<Cesium3DTileset[]>;
   issEntityRef: React.MutableRefObject<Entity | null>;
 }
 

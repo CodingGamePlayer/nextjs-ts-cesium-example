@@ -39,19 +39,7 @@ export const resetCamera = (cesiumViewer: Viewer | null) => {
   }
 };
 
-// 프리미티브 정리 함수
-export const cleanUpPrimitives = (refs: ViewerRefs) => {
-  //On NextJS 13.4+, React Strict Mode is on by default.
-  //The block below will remove all added primitives from the scene.
-  refs.addedScenePrimitives.current.forEach((scenePrimitive) => {
-    if (refs.cesiumViewer.current !== null) {
-      refs.cesiumViewer.current.scene.primitives.remove(scenePrimitive);
-    }
-  });
-  refs.addedScenePrimitives.current = [];
-};
-
-// ISS로 카메라 이동 함수
+// 카메라 이동 함수
 export const flyToISS = (cesiumViewer: Viewer | null, enableTracking: boolean = false) => {
   if (!cesiumViewer) return;
 
